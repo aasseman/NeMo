@@ -111,6 +111,7 @@ def create_dags(model_config_file, vocab, args, nf):
 
 
 def main():
+    logging.setLevel(50)
     parser = argparse.ArgumentParser(
         parents=[nm_argparse.NemoArgParser()], description='AN4 ASR', conflict_handler='resolve',
     )
@@ -171,6 +172,7 @@ def main():
         args.model_config, vocab, args, nf
     )
 
+    [print(str(p)) for p in nemo.utils.app_state.AppState().modules]
     nf.train(
         tensors_to_optimize=[loss],
         callbacks=callbacks,
@@ -240,6 +242,7 @@ def main():
         loss, eval_tensors, callbacks, total_steps, _, _ = create_dags(args.model_config, vocab, args, nf)
 
         nf.reset_trainer()
+        [print(str(p)) for p in nemo.utils.app_state.AppState().modules]
         nf.train(
             tensors_to_optimize=[loss],
             callbacks=callbacks,
