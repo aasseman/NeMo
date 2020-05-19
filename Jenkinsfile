@@ -21,16 +21,16 @@ pipeline {
         sh 'apt-get update && apt-get install -y bc && pip install -r requirements/requirements_test.txt'
       }
     }
-    // stage('Code formatting checks') {
-    //   steps {
-    //     sh 'python setup.py style'
-    //   }
-    // }
-    // stage('Documentation check') {
-    //   steps {
-    //     sh './reinstall.sh && pytest -m docs'
-    //   }
-    // }
+    stage('Code formatting checks') {
+      steps {
+        sh 'python setup.py style'
+      }
+    }
+    stage('Documentation check') {
+      steps {
+        sh './reinstall.sh && pytest -m docs'
+      }
+    }
 
 
     // stage('L0: Unit Tests GPU') {
@@ -297,11 +297,11 @@ pipeline {
         //     sh 'cd examples/asr && CUDA_VISIBLE_DEVICES=0 python jasper_an4.py --amp_opt_level=O1 --num_epochs=35 --test_after_training --work_dir=O1'
         //   }
         // }
-        stage('GAN O2') {
-          steps {
-            sh 'cd examples/image && CUDA_VISIBLE_DEVICES=0 python gan.py --amp_opt_level=O2 --num_epochs=3 --train_dataset=/home/TestData/'
-          }
-        }
+        // stage('GAN O2') {
+        //   steps {
+        //     sh 'cd examples/image && CUDA_VISIBLE_DEVICES=0 python gan.py --amp_opt_level=O2 --num_epochs=3 --train_dataset=/home/TestData/'
+        //   }
+        // }
         stage('Jasper AN4 O2') {
           steps {
             sh 'cd examples/asr && CUDA_VISIBLE_DEVICES=1 python jasper_an4.py --amp_opt_level=O2 --num_epochs=35 --test_after_training --work_dir=O2 --train_dataset=/home/TestData/an4_dataset/an4_train.json --eval_datasets=/home/TestData/an4_dataset/an4_val.json --do_not_eval_at_start --eval_freq 1000'
@@ -321,18 +321,18 @@ pipeline {
     //   }
     // }
 
-    stage('L2: Multi-GPU Jasper test') {
-      when {
-        anyOf{
-          branch 'master'
-          changeRequest()
-        }
-      }
-      failFast true
-      steps {
-        sh 'cd examples/asr && CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch --nproc_per_node=2 jasper_an4.py --num_epochs=40 --batch_size=24 --work_dir=multi_gpu --test_after_training  --train_dataset=/home/TestData/an4_dataset/an4_train.json --eval_datasets=/home/TestData/an4_dataset/an4_val.json --do_not_eval_at_start  --eval_freq 1000'
-      }
-    }
+    // stage('L2: Multi-GPU Jasper test') {
+    //   when {
+    //     anyOf{
+    //       branch 'master'
+    //       changeRequest()
+    //     }
+    //   }
+    //   failFast true
+    //   steps {
+    //     sh 'cd examples/asr && CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch --nproc_per_node=2 jasper_an4.py --num_epochs=40 --batch_size=24 --work_dir=multi_gpu --test_after_training  --train_dataset=/home/TestData/an4_dataset/an4_train.json --eval_datasets=/home/TestData/an4_dataset/an4_val.json --do_not_eval_at_start  --eval_freq 1000'
+    //   }
+    // }
 
 
     // stage('L2: TTS Tests') {
