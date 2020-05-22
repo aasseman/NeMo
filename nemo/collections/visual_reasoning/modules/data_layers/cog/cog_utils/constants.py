@@ -33,6 +33,7 @@
 
 import itertools
 import string
+
 import numpy as np
 
 # RGB, from https://sashat.me/2017/01/11/list-of-20-simple-distinct-colors/
@@ -57,7 +58,7 @@ WORD2COLOR = {
     'coral': (255, 215, 180),
     'navy': (0, 0, 128),
     'grey': (128, 128, 128),
-    'white': (255, 255, 255)
+    'white': (255, 255, 255),
 }
 
 ALLSPACES = ['left', 'right', 'top', 'bottom']
@@ -66,8 +67,22 @@ ALLSHAPES = ['circle', 'square', 'cross', 'triangle', 'vbar', 'hbar']
 
 # Comment out the following to use a smaller set of colors and shapes
 ALLCOLORS += [
-    'cyan', 'magenta', 'lime', 'pink', 'teal', 'lavender', 'brown', 'beige',
-    'maroon', 'mint', 'olive', 'coral', 'navy', 'grey', 'white']
+    'cyan',
+    'magenta',
+    'lime',
+    'pink',
+    'teal',
+    'lavender',
+    'brown',
+    'beige',
+    'maroon',
+    'mint',
+    'olive',
+    'coral',
+    'navy',
+    'grey',
+    'white',
+]
 ALLSHAPES += list(string.ascii_lowercase)
 
 ALLCOLORSHAPES = [x for x in itertools.product(ALLCOLORS, ALLSHAPES)]
@@ -78,17 +93,33 @@ ALLWHENS_PROB = [0.5, 0.25, 0.25]
 INVALID = 'invalid'
 
 # Allowed vocabulary, the first word is invalid
-INPUTVOCABULARY = [
-    'invalid',
-    '.', ',', '?',
-    'object', 'color', 'shape',
-    'loc', 'on',
-    'if', 'then', 'else',
-    'exist',
-    'equal', 'and',
-    'the', 'of', 'with',
-    'point',
-] + ALLSPACES + ALLCOLORS + ALLSHAPES + ALLWHENS
+INPUTVOCABULARY = (
+    [
+        'invalid',
+        '.',
+        ',',
+        '?',
+        'object',
+        'color',
+        'shape',
+        'loc',
+        'on',
+        'if',
+        'then',
+        'else',
+        'exist',
+        'equal',
+        'and',
+        'the',
+        'of',
+        'with',
+        'point',
+    ]
+    + ALLSPACES
+    + ALLCOLORS
+    + ALLSHAPES
+    + ALLWHENS
+)
 # For faster str -> index lookups
 INPUTVOCABULARY_DICT = dict([(k, i) for i, k in enumerate(INPUTVOCABULARY)])
 
@@ -100,7 +131,7 @@ OUTPUTVOCABULARY = ['true', 'false'] + ALLCOLORS + ALLSHAPES
 MAXSEQLENGTH = 25
 
 # If use popvec out_type
-#def get_prefs(grid_size):
+# def get_prefs(grid_size):
 #  """Helper function.
 #
 #  Args:
@@ -113,16 +144,15 @@ MAXSEQLENGTH = 25
 #  prefs_x = prefs_x.flatten().astype('float32')
 #  prefs_y = prefs_y.flatten().astype('float32')
 #
-  # numpy array (Grid_size**2, 2)
+# numpy array (Grid_size**2, 2)
 #  prefs = (np.array([prefs_x, prefs_y]).astype('float32')).T
 #  return prefs
 
 GRID_SIZE = 7
-prefs_y, prefs_x = (np.mgrid[0:GRID_SIZE, 0:GRID_SIZE]) / (GRID_SIZE - 1.)
+prefs_y, prefs_x = (np.mgrid[0:GRID_SIZE, 0:GRID_SIZE]) / (GRID_SIZE - 1.0)
 prefs_x = prefs_x.flatten().astype('float32')
 prefs_y = prefs_y.flatten().astype('float32')
 
-  # numpy array (Grid_size**2, 2)
+# numpy array (Grid_size**2, 2)
 PREFS = (np.array([prefs_x, prefs_y]).astype('float32')).T
-#PREFS = get_prefs(GRID_SIZE)
-
+# PREFS = get_prefs(GRID_SIZE)

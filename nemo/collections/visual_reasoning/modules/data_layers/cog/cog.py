@@ -17,20 +17,21 @@
 
 __author__ = "Emre Sevgen, Tomasz Kornuta"
 
-import torch
-import torch.nn as nn
 import gzip
 import json
 import os
-import tarfile
 import string
+import tarfile
+
 import numpy as np
-from miprometheus.problems.seq_to_seq.video_text_to_class.video_text_to_class_problem import VideoTextToClassProblem
+import torch
+import torch.nn as nn
 from miprometheus.problems.seq_to_seq.video_text_to_class.cog.cog_utils import json_to_img as jti
+from miprometheus.problems.seq_to_seq.video_text_to_class.video_text_to_class_problem import VideoTextToClassProblem
 
 
 class COG(VideoTextToClassProblem):
-	"""
+    """
 	The COG dataset is a sequential VQA dataset.
 
 	Inputs are a sequence of images of simple shapes and characters on a black background, \
@@ -41,8 +42,8 @@ class COG(VideoTextToClassProblem):
 
 	"""
 
-	def __init__(self, params):
-		"""
+    def __init__(self, params):
+        """
 		Initializes the :py:class:`COG` problem:
 
 			- Calls :py:class:`miprometheus.problems.VQAProblem` class constructor,
@@ -100,137 +101,182 @@ class COG(VideoTextToClassProblem):
 
 
 		"""
-	
-		# Call base class constructors
-		super(COG, self).__init__(params)
 
-		# Set default parameters.
-		self.params.add_default_params({'data_folder': os.path.expanduser('~/data/cog'), 'set': 'train',
-										'tasks': 'class',
-										'dataset_type': 'canonical',
-										'initialization_only': False})
+        # Call base class constructors
+        super(COG, self).__init__(params)
 
-		# Retrieve parameters from the dictionary
-		# Data folder main is /path/cog
-		# Data folder parent is data_X_Y_Z
-		# Data folder children are train_X_Y_Z, test_X_Y_Z, or val_X_Y_Z
-		self.data_folder_main = os.path.expanduser(params['data_folder'])
+        # Set default parameters.
+        self.params.add_default_params(
+            {
+                'data_folder': os.path.expanduser('~/data/cog'),
+                'set': 'train',
+                'tasks': 'class',
+                'dataset_type': 'canonical',
+                'initialization_only': False,
+            }
+        )
 
-		self.set = params['set']
-		assert self.set in ['val', 'test', 'train'], "set in configuration file must be one of 'val', 'test', or " \
-													 "'train', got {}".format(self.set)
-		self.dataset_type = params['dataset_type']
-		assert self.dataset_type in ['canonical', 'hard', 'generated'], "dataset in configuration file must be one of " \
-																		"'canonical', 'hard', or 'generated', got {}".format(self.dataset_type)
+        # Retrieve parameters from the dictionary
+        # Data folder main is /path/cog
+        # Data folder parent is data_X_Y_Z
+        # Data folder children are train_X_Y_Z, test_X_Y_Z, or val_X_Y_Z
+        self.data_folder_main = os.path.expanduser(params['data_folder'])
 
-		# Parse task and dataset_type
-		self.parse_tasks_and_dataset_type(params)
-	
-		# Name
-		self.name = 'COG'
+        self.set = params['set']
+        assert self.set in [
+            'val',
+            'test',
+            'train',
+        ], "set in configuration file must be one of 'val', 'test', or " "'train', got {}".format(self.set)
+        self.dataset_type = params['dataset_type']
+        assert self.dataset_type in ['canonical', 'hard', 'generated'], (
+            "dataset in configuration file must be one of "
+            "'canonical', 'hard', or 'generated', got {}".format(self.dataset_type)
+        )
 
-		# Initialize word lookup dictionary
-		self.word_lookup = {}
+        # Parse task and dataset_type
+        self.parse_tasks_and_dataset_type(params)
 
-		# Initialize unique word counter. Updated by UpdateAndFetchLookup
-		self.nr_unique_words = 1
+        # Name
+        self.name = 'COG'
 
-		# This should be the length of the longest sentence encounterable
-		self.nwords = 24
+        # Initialize word lookup dictionary
+        self.word_lookup = {}
 
-		# Get the "hardcoded" image width/height.
-		self.img_size = 112  # self.params['img_size']
+        # Initialize unique word counter. Updated by UpdateAndFetchLookup
+        self.nr_unique_words = 1
 
-		self.output_classes_pointing=49
+        # This should be the length of the longest sentence encounterable
+        self.nwords = 24
 
-		# Set default values
-		self.default_values = {	'height': self.img_size,
-								'width': self.img_size,
-								'num_channels': 3,
-								'sequence_length' : self.sequence_length,
-								'nb_classes': self.output_classes,
-								'nb_classes_pointing': self.output_classes_pointing,
-								'embed_vocab_size': self.input_words}
-		
-		# Set data dictionary based on parsed dataset type
-		self.data_definitions = {
-			'images': {'size': [-1, self.sequence_length, 3, self.img_size, self.img_size], 'type': [torch.Tensor]},
-			'tasks':	{'size': [-1, 1], 'type': [list, str]},
-			'questions': 	{'size': [-1,self.nwords], 'type': [torch.Tensor]},
-			#'targets': {'size': [-1,self.sequence_length, self.output_classes], 'type': [torch.Tensor]},
-			'targets_pointing' :	{'size': [-1, self.sequence_length, 2], 'type': [torch.Tensor]},
-			'targets_answer':{'size': [-1, self.sequence_length, self.output_classes], 'type' : [list,str]},
-			'masks_pnt':{'size': [-1, self.sequence_length ], 'type' : [torch.Tensor]},
-			'masks_word':{'size': [-1, self.sequence_length], 'type' : [torch.Tensor]}
-		}	
+        # Get the "hardcoded" image width/height.
+        self.img_size = 112  # self.params['img_size']
 
-		# Check if dataset exists, download or generate if necessary.
-		self.source_dataset()
+        self.output_classes_pointing = 49
 
-		if not params['initialization_only']:
+        # Set default values
+        self.default_values = {
+            'height': self.img_size,
+            'width': self.img_size,
+            'num_channels': 3,
+            'sequence_length': self.sequence_length,
+            'nb_classes': self.output_classes,
+            'nb_classes_pointing': self.output_classes_pointing,
+            'embed_vocab_size': self.input_words,
+        }
 
-			# Load all the .jsons, but image generation is done in __getitem__
-			self.dataset=[]
-			
-	
-			self.logger.info("Loading dataset as json into memory.")
-			# Val and Test are not shuffled
-			if self.set == 'val' or self.set == 'test':
-				for tasklist in os.listdir(self.data_folder_child):
-					if tasklist[4:-8] in self.tasks:
-						with gzip.open(os.path.join(self.data_folder_child,tasklist)) as f:
-							fulltask = f.read().decode('utf-8').split('\n')
-							for datapoint in fulltask:
-								self.dataset.append(json.loads(datapoint))
-						print("{} task examples loaded.".format(tasklist[4:-8]))
-					else:
-						self.logger.info("Skipped loading {} task.".format(tasklist[4:-8]))
-		
-			# Training set is shuffled
-			elif self.set == 'train':
-				for zipfile in os.listdir(self.data_folder_child):
-					with gzip.open(os.path.join(self.data_folder_child,zipfile)) as f:
-						fullzip = f.read().decode('utf-8').split('\n')
-						for datapoint in fullzip:
-							task = json.loads(datapoint)
-							if task['family'] in self.tasks:
-								self.dataset.append(task)
-					print("Zip file {} loaded.".format(zipfile))		
+        # Set data dictionary based on parsed dataset type
+        self.data_definitions = {
+            'images': {'size': [-1, self.sequence_length, 3, self.img_size, self.img_size], 'type': [torch.Tensor]},
+            'tasks': {'size': [-1, 1], 'type': [list, str]},
+            'questions': {'size': [-1, self.nwords], 'type': [torch.Tensor]},
+            #'targets': {'size': [-1,self.sequence_length, self.output_classes], 'type': [torch.Tensor]},
+            'targets_pointing': {'size': [-1, self.sequence_length, 2], 'type': [torch.Tensor]},
+            'targets_answer': {'size': [-1, self.sequence_length, self.output_classes], 'type': [list, str]},
+            'masks_pnt': {'size': [-1, self.sequence_length], 'type': [torch.Tensor]},
+            'masks_word': {'size': [-1, self.sequence_length], 'type': [torch.Tensor]},
+        }
 
-			self.length = len(self.dataset)
+        # Check if dataset exists, download or generate if necessary.
+        self.source_dataset()
 
-			# Testing output classes
-			#if self.set == 'val':
-			#	self.output_words = []
-			#	for datapoint in self.dataset:
-			#		for answer in datapoint['answers']:
-			#			if not answer in self.output_words:
-			#				self.output_words.append(answer)
+        if not params['initialization_only']:
 
-				#print(self.output_words)
-				#print(len(self.output_words) )
+            # Load all the .jsons, but image generation is done in __getitem__
+            self.dataset = []
 
-		else:
-			self.logger.info("COG initialization complete.")
-			exit(0)
+            self.logger.info("Loading dataset as json into memory.")
+            # Val and Test are not shuffled
+            if self.set == 'val' or self.set == 'test':
+                for tasklist in os.listdir(self.data_folder_child):
+                    if tasklist[4:-8] in self.tasks:
+                        with gzip.open(os.path.join(self.data_folder_child, tasklist)) as f:
+                            fulltask = f.read().decode('utf-8').split('\n')
+                            for datapoint in fulltask:
+                                self.dataset.append(json.loads(datapoint))
+                        print("{} task examples loaded.".format(tasklist[4:-8]))
+                    else:
+                        self.logger.info("Skipped loading {} task.".format(tasklist[4:-8]))
 
-		self.categories = ['AndCompareColor', 'AndCompareShape', 'AndSimpleCompareColor',
-									 'AndSimpleCompareShape', 'CompareColor', 'CompareShape', 'Exist',
-									 'ExistColor', 'ExistColorOf', 'ExistColorSpace', 'ExistLastColorSameShape',
-									 'ExistLastObjectSameObject', 'ExistLastShapeSameColor', 'ExistShape',
-									 'ExistShapeOf', 'ExistShapeSpace', 'ExistSpace', 'GetColor', 'GetColorSpace',
-									 'GetShape', 'GetShapeSpace', 'SimpleCompareColor', 'SimpleCompareShape', 'AndSimpleExistColorGo', 'AndSimpleExistGo', 'AndSimpleExistShapeGo', 'CompareColorGo',
-								 'CompareShapeGo', 'ExistColorGo', 'ExistColorSpaceGo', 'ExistGo', 'ExistShapeGo',
-								 'ExistShapeSpaceGo', 'ExistSpaceGo', 'Go', 'GoColor', 'GoColorOf', 'GoShape',
-								 'GoShapeOf', 'SimpleCompareColorGo', 'SimpleCompareShapeGo', 'SimpleExistColorGo',
-								 'SimpleExistGo','SimpleExistShapeGo']
+            # Training set is shuffled
+            elif self.set == 'train':
+                for zipfile in os.listdir(self.data_folder_child):
+                    with gzip.open(os.path.join(self.data_folder_child, zipfile)) as f:
+                        fullzip = f.read().decode('utf-8').split('\n')
+                        for datapoint in fullzip:
+                            task = json.loads(datapoint)
+                            if task['family'] in self.tasks:
+                                self.dataset.append(task)
+                    print("Zip file {} loaded.".format(zipfile))
 
+            self.length = len(self.dataset)
 
-		self.tuple_list = [[0,0,0] for _ in range(len(self.categories))]
+            # Testing output classes
+            # if self.set == 'val':
+            # 	self.output_words = []
+            # 	for datapoint in self.dataset:
+            # 		for answer in datapoint['answers']:
+            # 			if not answer in self.output_words:
+            # 				self.output_words.append(answer)
 
+            # print(self.output_words)
+            # print(len(self.output_words) )
 
-	def evaluate_loss(self, data_dict, logits):
-		"""
+        else:
+            self.logger.info("COG initialization complete.")
+            exit(0)
+
+        self.categories = [
+            'AndCompareColor',
+            'AndCompareShape',
+            'AndSimpleCompareColor',
+            'AndSimpleCompareShape',
+            'CompareColor',
+            'CompareShape',
+            'Exist',
+            'ExistColor',
+            'ExistColorOf',
+            'ExistColorSpace',
+            'ExistLastColorSameShape',
+            'ExistLastObjectSameObject',
+            'ExistLastShapeSameColor',
+            'ExistShape',
+            'ExistShapeOf',
+            'ExistShapeSpace',
+            'ExistSpace',
+            'GetColor',
+            'GetColorSpace',
+            'GetShape',
+            'GetShapeSpace',
+            'SimpleCompareColor',
+            'SimpleCompareShape',
+            'AndSimpleExistColorGo',
+            'AndSimpleExistGo',
+            'AndSimpleExistShapeGo',
+            'CompareColorGo',
+            'CompareShapeGo',
+            'ExistColorGo',
+            'ExistColorSpaceGo',
+            'ExistGo',
+            'ExistShapeGo',
+            'ExistShapeSpaceGo',
+            'ExistSpaceGo',
+            'Go',
+            'GoColor',
+            'GoColorOf',
+            'GoShape',
+            'GoShapeOf',
+            'SimpleCompareColorGo',
+            'SimpleCompareShapeGo',
+            'SimpleExistColorGo',
+            'SimpleExistGo',
+            'SimpleExistShapeGo',
+        ]
+
+        self.tuple_list = [[0, 0, 0] for _ in range(len(self.categories))]
+
+    def evaluate_loss(self, data_dict, logits):
+        """
 		Calculates accuracy equal to mean number of correct predictions in a given batch.
 		The function calculates two separate losses for answering and pointing actions and sums them up.
 
@@ -239,52 +285,51 @@ class COG(VideoTextToClassProblem):
 
 		:param logits: Predictions being output of the model, consisting of a tuple (logits_answer, logits_pointing).
 		"""
-		# Get targets.
-		targets_answer = data_dict['targets_answer']
-		targets_pointing = data_dict['targets_pointing']
+        # Get targets.
+        targets_answer = data_dict['targets_answer']
+        targets_pointing = data_dict['targets_pointing']
 
-		# Get predictions.
-		preds_answer = logits[0]
-		preds_pointing = logits[1]
+        # Get predictions.
+        preds_answer = logits[0]
+        preds_pointing = logits[1]
 
-		# Get sizes.
-		batch_size = logits[0].size(0)
-		img_seq_len = logits[0].size(1)
+        # Get sizes.
+        batch_size = logits[0].size(0)
+        img_seq_len = logits[0].size(1)
 
-		# Retrieve "pointing" masks, both of size [BATCH_SIZE x IMG_SEQ_LEN] and transform it into floats.
-		mask_pointing = data_dict['masks_pnt'].type(self.app_state.FloatTensor)
+        # Retrieve "pointing" masks, both of size [BATCH_SIZE x IMG_SEQ_LEN] and transform it into floats.
+        mask_pointing = data_dict['masks_pnt'].type(self.app_state.FloatTensor)
 
-		# Classification loss.
-		# Reshape predictions [BATCH_SIZE * IMG_SEQ_LEN x CLASSES]
-		preds_answer = preds_answer.view(batch_size*img_seq_len, -1)
-		# Reshape targets [BATCH_SIZE * IMG_SEQ_LEN]
-		targets_answer = targets_answer.view(batch_size*img_seq_len)
-		# Calculate loss.
-		# Ignore_index: specifies a target VALUE that is ignored and does not contribute to the input gradient. 
-		# -1 is set when we do not use that action.
-		ce_loss_fn = nn.CrossEntropyLoss(ignore_index=-1)
-		self.loss_answer = ce_loss_fn(preds_answer, targets_answer)
+        # Classification loss.
+        # Reshape predictions [BATCH_SIZE * IMG_SEQ_LEN x CLASSES]
+        preds_answer = preds_answer.view(batch_size * img_seq_len, -1)
+        # Reshape targets [BATCH_SIZE * IMG_SEQ_LEN]
+        targets_answer = targets_answer.view(batch_size * img_seq_len)
+        # Calculate loss.
+        # Ignore_index: specifies a target VALUE that is ignored and does not contribute to the input gradient.
+        # -1 is set when we do not use that action.
+        ce_loss_fn = nn.CrossEntropyLoss(ignore_index=-1)
+        self.loss_answer = ce_loss_fn(preds_answer, targets_answer)
 
-		# Pointing loss.
-		# We will softmax over the third dimension of [BATCH_SIZE x IMG_SEQ_LEN x NUM_POINT_ACTIONS].
-		logsoftmax_fn = nn.LogSoftmax(dim=2)
-		# Calculate cross entropy [BATCH_SIZE x IMG_SEQ_LEN].
-		ce_point = torch.sum((-targets_pointing * logsoftmax_fn(preds_pointing)), dim=2) * mask_pointing
-		#print("mask_pointing =", mask_pointing)
-		#print("ce_point = ", ce_point)
+        # Pointing loss.
+        # We will softmax over the third dimension of [BATCH_SIZE x IMG_SEQ_LEN x NUM_POINT_ACTIONS].
+        logsoftmax_fn = nn.LogSoftmax(dim=2)
+        # Calculate cross entropy [BATCH_SIZE x IMG_SEQ_LEN].
+        ce_point = torch.sum((-targets_pointing * logsoftmax_fn(preds_pointing)), dim=2) * mask_pointing
+        # print("mask_pointing =", mask_pointing)
+        # print("ce_point = ", ce_point)
 
-		# Calculate mean - manually, skipping all non-pointing elements of the targets.
-		if mask_pointing.sum().item() != 0:
-			self.loss_pointing = torch.sum(ce_point) / mask_pointing.sum() 
-		else:
-			self.loss_pointing = torch.tensor(0).type(self.app_state.FloatTensor)
+        # Calculate mean - manually, skipping all non-pointing elements of the targets.
+        if mask_pointing.sum().item() != 0:
+            self.loss_pointing = torch.sum(ce_point) / mask_pointing.sum()
+        else:
+            self.loss_pointing = torch.tensor(0).type(self.app_state.FloatTensor)
 
-		# Both losses are averaged over batch size and sequence lengts - so we can simply sum them.
-		return self.loss_answer + self.loss_pointing
+        # Both losses are averaged over batch size and sequence lengts - so we can simply sum them.
+        return self.loss_answer + self.loss_pointing
 
-
-	def calculate_accuracy(self, data_dict, logits):
-		""" Calculates accuracy equal to mean number of correct predictions in a given batch.
+    def calculate_accuracy(self, data_dict, logits):
+        """ Calculates accuracy equal to mean number of correct predictions in a given batch.
 		WARNING: Applies mask to both logits and targets!
 
 		:param data_dict: DataDict({'sequences', 'sequences_length', 'targets', 'mask'}).
@@ -292,96 +337,94 @@ class COG(VideoTextToClassProblem):
 		:param logits: Predictions being output of the model.
 
 		"""
-		# Get targets.
-		targets_answer = data_dict['targets_answer']
-		targets_pointing = data_dict['targets_pointing']
+        # Get targets.
+        targets_answer = data_dict['targets_answer']
+        targets_pointing = data_dict['targets_pointing']
 
-		# Get predictions.
-		preds_answer = logits[0]
-		preds_pointing = logits[1]
+        # Get predictions.
+        preds_answer = logits[0]
+        preds_pointing = logits[1]
 
-		# Get sizes.
-		batch_size = logits[0].size(0)
-		img_seq_len = logits[0].size(1)
+        # Get sizes.
+        batch_size = logits[0].size(0)
+        img_seq_len = logits[0].size(1)
 
-		# Reshape predictions [BATCH_SIZE * IMG_SEQ_LEN x CLASSES]
-		preds_answer = preds_answer.view(batch_size*img_seq_len, -1)
-		preds_pointing = preds_pointing.view(batch_size*img_seq_len, -1)
+        # Reshape predictions [BATCH_SIZE * IMG_SEQ_LEN x CLASSES]
+        preds_answer = preds_answer.view(batch_size * img_seq_len, -1)
+        preds_pointing = preds_pointing.view(batch_size * img_seq_len, -1)
 
-		# Reshape targets: answers [BATCH_SIZE * IMG_SEQ_LEN]
-		targets_answer = targets_answer.view(batch_size*img_seq_len)
-		# Reshape targets: pointings [BATCH_SIZE * IMG_SEQ_LEN x NUM_ACTIONS]
-		targets_pointing = targets_pointing.view(batch_size*img_seq_len, -1)
+        # Reshape targets: answers [BATCH_SIZE * IMG_SEQ_LEN]
+        targets_answer = targets_answer.view(batch_size * img_seq_len)
+        # Reshape targets: pointings [BATCH_SIZE * IMG_SEQ_LEN x NUM_ACTIONS]
+        targets_pointing = targets_pointing.view(batch_size * img_seq_len, -1)
 
-		# Retrieve "answer" and "pointing" masks, both of size [BATCH_SIZE * IMG_SEQ_LEN].
-		mask_answer = data_dict['masks_word']
-		mask_answer = mask_answer.view(batch_size*img_seq_len)
+        # Retrieve "answer" and "pointing" masks, both of size [BATCH_SIZE * IMG_SEQ_LEN].
+        mask_answer = data_dict['masks_word']
+        mask_answer = mask_answer.view(batch_size * img_seq_len)
 
-		mask_pointing = data_dict['masks_pnt']
-		mask_pointing = mask_pointing.view(batch_size*img_seq_len)
+        mask_pointing = data_dict['masks_pnt']
+        mask_pointing = mask_pointing.view(batch_size * img_seq_len)
 
-		#print("targets_answer = ", targets_answer)
-		#print("preds_answer = ", preds_answer)
-		#print("mask_answer = ", mask_answer)
+        # print("targets_answer = ", targets_answer)
+        # print("preds_answer = ", preds_answer)
+        # print("mask_answer = ", mask_answer)
 
-		#print("targets_pointing = ", targets_pointing)
-		#print("preds_pointing = ", preds_pointing)
-		#print("mask_pointing = ", mask_pointing)
+        # print("targets_pointing = ", targets_pointing)
+        # print("preds_pointing = ", preds_pointing)
+        # print("mask_pointing = ", mask_pointing)
 
+        #########################################################################
+        # Calculate accuracy for Answering task.
+        # Get answers [BATCH_SIZE * IMG_SEQ_LEN]
+        _, indices = torch.max(preds_answer, 1)
 
-		#########################################################################
-		# Calculate accuracy for Answering task.
-		# Get answers [BATCH_SIZE * IMG_SEQ_LEN]
-		_, indices = torch.max(preds_answer, 1)
+        # Calculate correct answers with additional "masking".
+        correct_answers = (indices == targets_answer).type(self.app_state.ByteTensor) * mask_answer
 
-		# Calculate correct answers with additional "masking".
-		correct_answers = (indices == targets_answer).type(self.app_state.ByteTensor) * mask_answer
+        # Calculate accurary.
+        if mask_answer.sum() > 0:
+            acc_answer = float(correct_answers.sum().item()) / float(mask_answer.sum().item())
+        else:
+            acc_answer = 0.0
 
-		# Calculate accurary.
-		if mask_answer.sum() > 0:
-			acc_answer = float(correct_answers.sum().item()) / float(mask_answer.sum().item())
-		else:
-			acc_answer = 0.0
-
-		#########################################################################
-		# Calculate accuracy for Pointing task.
+        #########################################################################
+        # Calculate accuracy for Pointing task.
 
         # Normalize pointing with softmax.
-		softmax_pointing = nn.Softmax(dim=1)
-		preds_pointing=softmax_pointing(preds_pointing)
+        softmax_pointing = nn.Softmax(dim=1)
+        preds_pointing = softmax_pointing(preds_pointing)
 
-		# Calculate mean square error for every pointing action.
-		diff_pointing=(targets_pointing-preds_pointing)
-		diff_pointing=diff_pointing**2
-		# Sum all differences for a given answer.
-		# As a results we got 1D tensor of size [BATCH_SIZE * IMG_SEQ_LEN].
-		diff_pointing=torch.sum(diff_pointing,dim=1)
+        # Calculate mean square error for every pointing action.
+        diff_pointing = targets_pointing - preds_pointing
+        diff_pointing = diff_pointing ** 2
+        # Sum all differences for a given answer.
+        # As a results we got 1D tensor of size [BATCH_SIZE * IMG_SEQ_LEN].
+        diff_pointing = torch.sum(diff_pointing, dim=1)
 
         # Apply  threshold.
-		threshold=0.15**2
-		
-		# Check correct pointings.
-		correct_pointing = (diff_pointing < threshold).type(self.app_state.ByteTensor) * mask_pointing
-		#print('corect poitning',correct_pointing)
-		# Calculate accurary.
-		if mask_pointing.sum() > 0:
-			acc_pointing = float(correct_pointing.sum().item()) / float(mask_pointing.sum().item())
-		else:
-			acc_pointing = 0.0
+        threshold = 0.15 ** 2
 
+        # Check correct pointings.
+        correct_pointing = (diff_pointing < threshold).type(self.app_state.ByteTensor) * mask_pointing
+        # print('corect poitning',correct_pointing)
+        # Calculate accurary.
+        if mask_pointing.sum() > 0:
+            acc_pointing = float(correct_pointing.sum().item()) / float(mask_pointing.sum().item())
+        else:
+            acc_pointing = 0.0
 
-		#########################################################################
-		# Total accuracy.
-		acc_total = float(correct_answers.sum() + correct_pointing.sum()) / float( mask_answer.sum() + mask_pointing.sum() )
-		#acc_total = torch.mean(torch.cat( (correct_answers.type(torch.FloatTensor), correct_pointing.type(torch.FloatTensor)) ) )
+        #########################################################################
+        # Total accuracy.
+        acc_total = float(correct_answers.sum() + correct_pointing.sum()) / float(
+            mask_answer.sum() + mask_pointing.sum()
+        )
+        # acc_total = torch.mean(torch.cat( (correct_answers.type(torch.FloatTensor), correct_pointing.type(torch.FloatTensor)) ) )
 
-		# Return all three of them.
-		return acc_total, acc_answer, acc_pointing
+        # Return all three of them.
+        return acc_total, acc_answer, acc_pointing
 
-
-
-	def get_acc_per_family(self, data_dict, logits):
-		"""
+    def get_acc_per_family(self, data_dict, logits):
+        """
 		Compute the accuracy per family for the current batch. Also accumulates
 		the number of correct predictions & questions per family in self.correct_pred_families (saved
 		to file).
@@ -401,128 +444,157 @@ class COG(VideoTextToClassProblem):
 
 		"""
 
-		# Get targets.
-		targets_answer = data_dict['targets_answer']
-		targets_pointing = data_dict['targets_pointing']
+        # Get targets.
+        targets_answer = data_dict['targets_answer']
+        targets_pointing = data_dict['targets_pointing']
 
-		#build dictionary to store acc families stats
+        # build dictionary to store acc families stats
 
+        categories = [
+            'AndCompareColor',
+            'AndCompareShape',
+            'AndSimpleCompareColor',
+            'AndSimpleCompareShape',
+            'CompareColor',
+            'CompareShape',
+            'Exist',
+            'ExistColor',
+            'ExistColorOf',
+            'ExistColorSpace',
+            'ExistLastColorSameShape',
+            'ExistLastObjectSameObject',
+            'ExistLastShapeSameColor',
+            'ExistShape',
+            'ExistShapeOf',
+            'ExistShapeSpace',
+            'ExistSpace',
+            'GetColor',
+            'GetColorSpace',
+            'GetShape',
+            'GetShapeSpace',
+            'SimpleCompareColor',
+            'SimpleCompareShape',
+            'AndSimpleExistColorGo',
+            'AndSimpleExistGo',
+            'AndSimpleExistShapeGo',
+            'CompareColorGo',
+            'CompareShapeGo',
+            'ExistColorGo',
+            'ExistColorSpaceGo',
+            'ExistGo',
+            'ExistShapeGo',
+            'ExistShapeSpaceGo',
+            'ExistSpaceGo',
+            'Go',
+            'GoColor',
+            'GoColorOf',
+            'GoShape',
+            'GoShapeOf',
+            'SimpleCompareColorGo',
+            'SimpleCompareShapeGo',
+            'SimpleExistColorGo',
+            'SimpleExistGo',
+            'SimpleExistShapeGo',
+        ]
 
+        tuple_list = [[0, 0, 0] for _ in range(len(self.categories))]
+        categories_stats = dict(zip(categories, tuple_list))
 
-		categories = ['AndCompareColor', 'AndCompareShape', 'AndSimpleCompareColor',
-						   'AndSimpleCompareShape', 'CompareColor', 'CompareShape', 'Exist',
-						   'ExistColor', 'ExistColorOf', 'ExistColorSpace', 'ExistLastColorSameShape',
-						   'ExistLastObjectSameObject', 'ExistLastShapeSameColor', 'ExistShape',
-						   'ExistShapeOf', 'ExistShapeSpace', 'ExistSpace', 'GetColor', 'GetColorSpace',
-						   'GetShape', 'GetShapeSpace', 'SimpleCompareColor', 'SimpleCompareShape',
-						   'AndSimpleExistColorGo', 'AndSimpleExistGo', 'AndSimpleExistShapeGo', 'CompareColorGo',
-						   'CompareShapeGo', 'ExistColorGo', 'ExistColorSpaceGo', 'ExistGo', 'ExistShapeGo',
-						   'ExistShapeSpaceGo', 'ExistSpaceGo', 'Go', 'GoColor', 'GoColorOf', 'GoShape',
-						   'GoShapeOf', 'SimpleCompareColorGo', 'SimpleCompareShapeGo', 'SimpleExistColorGo',
-						   'SimpleExistGo', 'SimpleExistShapeGo']
+        # Get tasks
+        tasks = data_dict['tasks']
 
-		tuple_list = [[0, 0, 0] for _ in range(len(self.categories))]
-		categories_stats = dict(zip(categories, tuple_list))
+        # Get predictions.
+        preds_answer = logits[0]
+        preds_pointing = logits[1]
 
+        # Get sizes.
+        batch_size = logits[0].size(0)
+        img_seq_len = logits[0].size(1)
 
-		#Get tasks
-		tasks = data_dict['tasks']
+        # Reshape predictions [BATCH_SIZE * IMG_SEQ_LEN x CLASSES]
+        preds_answer = preds_answer.view(batch_size * img_seq_len, -1)
+        preds_pointing = preds_pointing.view(batch_size * img_seq_len, -1)
 
-		# Get predictions.
-		preds_answer = logits[0]
-		preds_pointing = logits[1]
+        # Reshape targets: answers [BATCH_SIZE * IMG_SEQ_LEN]
+        targets_answer = targets_answer.view(batch_size * img_seq_len)
+        # Reshape targets: pointings [BATCH_SIZE * IMG_SEQ_LEN x NUM_ACTIONS]
+        targets_pointing = targets_pointing.view(batch_size * img_seq_len, -1)
 
-		# Get sizes.
-		batch_size = logits[0].size(0)
-		img_seq_len = logits[0].size(1)
+        # Retrieve "answer" and "pointing" masks, both of size [BATCH_SIZE * IMG_SEQ_LEN].
+        mask_answer = data_dict['masks_word']
+        mask_answer_non_flatten = mask_answer
+        mask_answer = mask_answer.view(batch_size * img_seq_len)
 
-		# Reshape predictions [BATCH_SIZE * IMG_SEQ_LEN x CLASSES]
-		preds_answer = preds_answer.view(batch_size * img_seq_len, -1)
-		preds_pointing = preds_pointing.view(batch_size * img_seq_len, -1)
+        mask_pointing = data_dict['masks_pnt']
+        mask_pointing_non_flatten = mask_pointing
+        mask_pointing = mask_pointing.view(batch_size * img_seq_len)
 
-		# Reshape targets: answers [BATCH_SIZE * IMG_SEQ_LEN]
-		targets_answer = targets_answer.view(batch_size * img_seq_len)
-		# Reshape targets: pointings [BATCH_SIZE * IMG_SEQ_LEN x NUM_ACTIONS]
-		targets_pointing = targets_pointing.view(batch_size * img_seq_len, -1)
+        #########################################################################
+        # Calculate accuracy for Answering task.
+        # Get answers [BATCH_SIZE * IMG_SEQ_LEN]
+        _, indices = torch.max(preds_answer, 1)
 
-		# Retrieve "answer" and "pointing" masks, both of size [BATCH_SIZE * IMG_SEQ_LEN].
-		mask_answer = data_dict['masks_word']
-		mask_answer_non_flatten = mask_answer
-		mask_answer = mask_answer.view(batch_size * img_seq_len)
+        # Calculate correct answers with additional "masking".
+        correct_answers = (indices == targets_answer).type(self.app_state.ByteTensor) * mask_answer
 
-		mask_pointing = data_dict['masks_pnt']
-		mask_pointing_non_flatten = mask_pointing
-		mask_pointing = mask_pointing.view(batch_size * img_seq_len)
+        #########################################################################
+        # Calculate accuracy for Pointing task.
 
-		#########################################################################
-		# Calculate accuracy for Answering task.
-		# Get answers [BATCH_SIZE * IMG_SEQ_LEN]
-		_, indices = torch.max(preds_answer, 1)
+        # Normalize pointing with softmax.
+        softmax_pointing = nn.Softmax(dim=1)
+        preds_pointing = softmax_pointing(preds_pointing)
 
-		# Calculate correct answers with additional "masking".
-		correct_answers = (indices == targets_answer).type(self.app_state.ByteTensor) * mask_answer
+        # Calculate mean square error for every pointing action.
+        diff_pointing = targets_pointing - preds_pointing
+        diff_pointing = diff_pointing ** 2
+        # Sum all differences for a given answer.
+        # As a results we got 1D tensor of size [BATCH_SIZE * IMG_SEQ_LEN].
+        diff_pointing = torch.sum(diff_pointing, dim=1)
 
-		#########################################################################
-		# Calculate accuracy for Pointing task.
+        # Apply  threshold.
+        threshold = 0.15 ** 2
 
-		# Normalize pointing with softmax.
-		softmax_pointing = nn.Softmax(dim=1)
-		preds_pointing = softmax_pointing(preds_pointing)
+        # Check correct pointings.
+        correct_pointing = (diff_pointing < threshold).type(self.app_state.ByteTensor) * mask_pointing
 
-		# Calculate mean square error for every pointing action.
-		diff_pointing = (targets_pointing - preds_pointing)
-		diff_pointing = diff_pointing ** 2
-		# Sum all differences for a given answer.
-		# As a results we got 1D tensor of size [BATCH_SIZE * IMG_SEQ_LEN].
-		diff_pointing = torch.sum(diff_pointing, dim=1)
+        # count correct and total for each category
+        for i in range(batch_size):
 
-		# Apply  threshold.
-		threshold = 0.15 ** 2
+            # update # of questions for the corresponding family
 
-		# Check correct pointings.
-		correct_pointing = (diff_pointing < threshold).type(self.app_state.ByteTensor) * mask_pointing
+            # classification
+            correct_ans = correct_answers.view(batch_size, img_seq_len, -1)
+            categories_stats[tasks[i]][1] += float(correct_ans[i].sum().item())
 
-        #count correct and total for each category
-		for i in range(batch_size):
+            # pointing
+            correct_pointing_non_flatten = correct_pointing.view(batch_size, img_seq_len, -1)
+            categories_stats[tasks[i]][1] += float(correct_pointing_non_flatten[i].sum().item())
 
-			# update # of questions for the corresponding family
+            # update the # of correct predictions for the corresponding family
 
-			#classification
-			correct_ans = correct_answers.view(batch_size, img_seq_len, -1)
-			categories_stats[tasks[i]][1] += float(correct_ans[i].sum().item())
+            # classification
+            categories_stats[tasks[i]][0] += float(mask_answer_non_flatten[i].sum().item())
 
-			#pointing
-			correct_pointing_non_flatten = correct_pointing.view(batch_size, img_seq_len, -1)
-			categories_stats[tasks[i]][1] += float(correct_pointing_non_flatten[i].sum().item())
+            # pointing
+            categories_stats[tasks[i]][0] += float(mask_pointing_non_flatten[i].sum().item())
 
-			#update the # of correct predictions for the corresponding family
+            # put task accuracy in third position of the dictionary
+            if categories_stats[tasks[i]][0] == 0:
+                categories_stats[tasks[i]][2] = 0.0
 
-			# classification
-			categories_stats[tasks[i]][0] += float(mask_answer_non_flatten[i].sum().item())
+            else:
+                categories_stats[tasks[i]][2] = categories_stats[tasks[i]][1] / categories_stats[tasks[i]][0]
 
-			# pointing
-			categories_stats[tasks[i]][0] += float(mask_pointing_non_flatten[i].sum().item())
+        return categories_stats
 
-			#put task accuracy in third position of the dictionary
-			if categories_stats[tasks[i]][0]==0:
-				categories_stats[tasks[i]][2] = 0.0
+    def output_class_to_int(self, targets_answer):
+        # for j, target in enumerate(targets_answer):
+        targets_answer = [-1 if a == 'invalid' else self.output_vocab.index(a) for a in targets_answer]
+        targets_answer = torch.LongTensor(targets_answer)
+        return targets_answer
 
-			else:
-				categories_stats[tasks[i]][2] = categories_stats[tasks[i]][1]/categories_stats[tasks[i]][0]
-        
-		return categories_stats
-
-
-
-	def output_class_to_int(self,targets_answer):
-		#for j, target in enumerate(targets_answer):
-		targets_answer = [-1 if a == 'invalid' else self.output_vocab.index(a) for a in targets_answer]
-		targets_answer = torch.LongTensor(targets_answer)
-		return targets_answer
-
-
-	def __getitem__(self, index):
-		"""
+    def __getitem__(self, index):
+        """
 		Getter method to access the dataset and return a sample.
 
 		:param index: index of the sample to return.
@@ -537,56 +609,58 @@ class COG(VideoTextToClassProblem):
 			- ``targets_answer``: Sequence of word targets for classification tasks.
 
 		"""
-		# This returns:
-		# All variables are numpy array of float32
-			# in_imgs: (n_epoch*batch_size, img_size, img_size, 3)
-			# in_rule: (max_seq_length, batch_size) the rule language input, type int32
-			# seq_length: (batch_size,) the length of each task instruction
-			# out_pnt: (n_epoch*batch_size, n_out_pnt)
-			# out_pnt_xy: (n_epoch*batch_size, -2)
-			# out_word: (n_epoch*batch_size, n_out_word)
-			# mask_pnt: (n_epoch*batch_size)
-			# mask_word: (n_epoch*batch_size)		
+        # This returns:
+        # All variables are numpy array of float32
+        # in_imgs: (n_epoch*batch_size, img_size, img_size, 3)
+        # in_rule: (max_seq_length, batch_size) the rule language input, type int32
+        # seq_length: (batch_size,) the length of each task instruction
+        # out_pnt: (n_epoch*batch_size, n_out_pnt)
+        # out_pnt_xy: (n_epoch*batch_size, -2)
+        # out_word: (n_epoch*batch_size, n_out_word)
+        # mask_pnt: (n_epoch*batch_size)
+        # mask_word: (n_epoch*batch_size)
 
-		# Get values from JSON.
-		(in_imgs, _, _, out_pnt, _, _, mask_pnt, mask_word, _) = jti.json_to_feeds([self.dataset[index]])
-				
-		# Create data dictionary.
-		data_dict = self.create_data_dict()
+        # Get values from JSON.
+        (in_imgs, _, _, out_pnt, _, _, mask_pnt, mask_word, _) = jti.json_to_feeds([self.dataset[index]])
 
-		# Images [BATCH_SIZE x IMG_SEQ_LEN x DEPTH x HEIGHT x WIDTH].
-		images = ((torch.from_numpy(in_imgs)).permute(1,0,4,2,3)).squeeze()
-		data_dict['images']	= images
+        # Create data dictionary.
+        data_dict = self.create_data_dict()
 
-		# Set masks used in loss/accuracy calculations.
-		data_dict['masks_pnt']	= torch.from_numpy(mask_pnt).type(torch.ByteTensor)
-		data_dict['masks_word']	= torch.from_numpy(mask_word).type(torch.ByteTensor)
+        # Images [BATCH_SIZE x IMG_SEQ_LEN x DEPTH x HEIGHT x WIDTH].
+        images = ((torch.from_numpy(in_imgs)).permute(1, 0, 4, 2, 3)).squeeze()
+        data_dict['images'] = images
 
-		data_dict['tasks']	= self.dataset[index]['family']
-		data_dict['questions'] = [self.dataset[index]['question']]
+        # Set masks used in loss/accuracy calculations.
+        data_dict['masks_pnt'] = torch.from_numpy(mask_pnt).type(torch.ByteTensor)
+        data_dict['masks_word'] = torch.from_numpy(mask_word).type(torch.ByteTensor)
 
-		data_dict['questions_string'] = [self.dataset[index]['question']]
-		data_dict['questions'] = torch.LongTensor([self.input_vocab.index(word) for word in data_dict['questions'][0].split()])
-		if(data_dict['questions'].size(0) <= self.nwords):
-			prev_size = data_dict['questions'].size(0)
-			data_dict['questions'].resize_(self.nwords)
-			data_dict['questions'][prev_size:] = 0
+        data_dict['tasks'] = self.dataset[index]['family']
+        data_dict['questions'] = [self.dataset[index]['question']]
 
-		# Set targets - depending on the answers.
-		answers = self.dataset[index]['answers']
-		data_dict['answers_string'] = self.dataset[index]['answers']
-		if data_dict['tasks'] in self.classification_tasks:
-			data_dict['targets_answer'] = self.output_class_to_int(answers)
-		else :
-			data_dict['targets_answer'] = torch.LongTensor([-1 for target in answers])
-	
-		# Why are we always setting pointing targets, and answer targets only when required (-1 opposite)?
-		data_dict['targets_pointing'] = torch.FloatTensor(out_pnt)
+        data_dict['questions_string'] = [self.dataset[index]['question']]
+        data_dict['questions'] = torch.LongTensor(
+            [self.input_vocab.index(word) for word in data_dict['questions'][0].split()]
+        )
+        if data_dict['questions'].size(0) <= self.nwords:
+            prev_size = data_dict['questions'].size(0)
+            data_dict['questions'].resize_(self.nwords)
+            data_dict['questions'][prev_size:] = 0
 
-		return data_dict
+        # Set targets - depending on the answers.
+        answers = self.dataset[index]['answers']
+        data_dict['answers_string'] = self.dataset[index]['answers']
+        if data_dict['tasks'] in self.classification_tasks:
+            data_dict['targets_answer'] = self.output_class_to_int(answers)
+        else:
+            data_dict['targets_answer'] = torch.LongTensor([-1 for target in answers])
 
-	def collate_fn(self, batch):
-		"""
+        # Why are we always setting pointing targets, and answer targets only when required (-1 opposite)?
+        data_dict['targets_pointing'] = torch.FloatTensor(out_pnt)
+
+        return data_dict
+
+    def collate_fn(self, batch):
+        """
 		Combines a list of :py:class:`miprometheus.utils.DataDict` (retrieved with :py:func:`__getitem__`) into a batch.
 
 		:param batch: individual :py:class:`miprometheus.utils.DataDict` samples to combine.
@@ -595,27 +669,33 @@ class COG(VideoTextToClassProblem):
 		:return: ``DataDict({'images', 'tasks', 'questions', 'targets_pointing', 'targets_answer'})`` containing the batch.
 
 		"""
-		data_dict = self.create_data_dict()
-		
-		data_dict['images'] = torch.stack([sample['images'] for sample in batch]).type(self.app_state.FloatTensor)
-		data_dict['tasks']  = [sample['tasks'] for sample in batch]
-		data_dict['questions'] = torch.stack([sample['questions'] for sample in batch]).type(self.app_state.LongTensor)
-		# Targets.
-		data_dict['targets_pointing'] = torch.stack([sample['targets_pointing'] for sample in batch]).type(self.app_state.FloatTensor)
-		data_dict['targets_answer'] = torch.stack([sample['targets_answer'] for sample in batch]).type(self.app_state.LongTensor)
-		# Masks.
-		data_dict['masks_pnt']	= torch.stack([sample['masks_pnt'] for sample in batch]).type(self.app_state.ByteTensor)
-		data_dict['masks_word']	= torch.stack([sample['masks_word'] for sample in batch]).type(self.app_state.ByteTensor)
-		data_dict['vocab'] = self.output_vocab
+        data_dict = self.create_data_dict()
 
-        #strings question and answer
-		data_dict['questions_string'] = [question['questions_string'] for question in batch]
-		data_dict['answers_string'] = [answer['answers_string'] for answer in batch]
+        data_dict['images'] = torch.stack([sample['images'] for sample in batch]).type(self.app_state.FloatTensor)
+        data_dict['tasks'] = [sample['tasks'] for sample in batch]
+        data_dict['questions'] = torch.stack([sample['questions'] for sample in batch]).type(self.app_state.LongTensor)
+        # Targets.
+        data_dict['targets_pointing'] = torch.stack([sample['targets_pointing'] for sample in batch]).type(
+            self.app_state.FloatTensor
+        )
+        data_dict['targets_answer'] = torch.stack([sample['targets_answer'] for sample in batch]).type(
+            self.app_state.LongTensor
+        )
+        # Masks.
+        data_dict['masks_pnt'] = torch.stack([sample['masks_pnt'] for sample in batch]).type(self.app_state.ByteTensor)
+        data_dict['masks_word'] = torch.stack([sample['masks_word'] for sample in batch]).type(
+            self.app_state.ByteTensor
+        )
+        data_dict['vocab'] = self.output_vocab
 
-		return data_dict
+        # strings question and answer
+        data_dict['questions_string'] = [question['questions_string'] for question in batch]
+        data_dict['answers_string'] = [answer['answers_string'] for answer in batch]
 
-	def parse_tasks_and_dataset_type(self, params):
-		"""
+        return data_dict
+
+    def parse_tasks_and_dataset_type(self, params):
+        """
 		Parses the task list and dataset type. Then sets folder paths to appropriate values.
 
 		:param params: Dictionary of parameters (read from the configuration ``.yaml`` file).
@@ -623,337 +703,441 @@ class COG(VideoTextToClassProblem):
 
 		"""
 
-		self.classification_tasks = ['AndCompareColor', 'AndCompareShape', 'AndSimpleCompareColor',
-									 'AndSimpleCompareShape', 'CompareColor', 'CompareShape', 'Exist',
-									 'ExistColor', 'ExistColorOf', 'ExistColorSpace', 'ExistLastColorSameShape',
-									 'ExistLastObjectSameObject', 'ExistLastShapeSameColor', 'ExistShape',
-									 'ExistShapeOf', 'ExistShapeSpace', 'ExistSpace', 'GetColor', 'GetColorSpace',
-									 'GetShape', 'GetShapeSpace', 'SimpleCompareColor', 'SimpleCompareShape']
+        self.classification_tasks = [
+            'AndCompareColor',
+            'AndCompareShape',
+            'AndSimpleCompareColor',
+            'AndSimpleCompareShape',
+            'CompareColor',
+            'CompareShape',
+            'Exist',
+            'ExistColor',
+            'ExistColorOf',
+            'ExistColorSpace',
+            'ExistLastColorSameShape',
+            'ExistLastObjectSameObject',
+            'ExistLastShapeSameColor',
+            'ExistShape',
+            'ExistShapeOf',
+            'ExistShapeSpace',
+            'ExistSpace',
+            'GetColor',
+            'GetColorSpace',
+            'GetShape',
+            'GetShapeSpace',
+            'SimpleCompareColor',
+            'SimpleCompareShape',
+        ]
 
-		self.regression_tasks = ['AndSimpleExistColorGo', 'AndSimpleExistGo', 'AndSimpleExistShapeGo', 'CompareColorGo',
-								 'CompareShapeGo', 'ExistColorGo', 'ExistColorSpaceGo', 'ExistGo', 'ExistShapeGo',
-								 'ExistShapeSpaceGo', 'ExistSpaceGo', 'Go', 'GoColor', 'GoColorOf', 'GoShape',
-								 'GoShapeOf', 'SimpleCompareColorGo', 'SimpleCompareShapeGo', 'SimpleExistColorGo',
-								 'SimpleExistGo','SimpleExistShapeGo']
+        self.regression_tasks = [
+            'AndSimpleExistColorGo',
+            'AndSimpleExistGo',
+            'AndSimpleExistShapeGo',
+            'CompareColorGo',
+            'CompareShapeGo',
+            'ExistColorGo',
+            'ExistColorSpaceGo',
+            'ExistGo',
+            'ExistShapeGo',
+            'ExistShapeSpaceGo',
+            'ExistSpaceGo',
+            'Go',
+            'GoColor',
+            'GoColorOf',
+            'GoShape',
+            'GoShapeOf',
+            'SimpleCompareColorGo',
+            'SimpleCompareShapeGo',
+            'SimpleExistColorGo',
+            'SimpleExistGo',
+            'SimpleExistShapeGo',
+        ]
 
-		self.binary_tasks = ['AndCompareColor','AndCompareShape','AndSimpleCompareColor','AndSimpleCompareShape','CompareColor','CompareShape','Exist',
-'ExistColor','ExistColorOf','ExistColorSpace','ExistLastColorSameShape','ExistLastObjectSameObject','ExistLastShapeSameColor',
-'ExistShape','ExistShapeOf','ExistShapeSpace','ExistSpace','SimpleCompareColor','SimpleCompareShape'] 
+        self.binary_tasks = [
+            'AndCompareColor',
+            'AndCompareShape',
+            'AndSimpleCompareColor',
+            'AndSimpleCompareShape',
+            'CompareColor',
+            'CompareShape',
+            'Exist',
+            'ExistColor',
+            'ExistColorOf',
+            'ExistColorSpace',
+            'ExistLastColorSameShape',
+            'ExistLastObjectSameObject',
+            'ExistLastShapeSameColor',
+            'ExistShape',
+            'ExistShapeOf',
+            'ExistShapeSpace',
+            'ExistSpace',
+            'SimpleCompareColor',
+            'SimpleCompareShape',
+        ]
 
-		self.all_colors = ['red', 'green', 'blue', 'yellow', 'purple', 'orange'] + [
-    'cyan', 'magenta', 'lime', 'pink', 'teal', 'lavender', 'brown', 'beige',
-    'maroon', 'mint', 'olive', 'coral', 'navy', 'grey', 'white']
+        self.all_colors = ['red', 'green', 'blue', 'yellow', 'purple', 'orange'] + [
+            'cyan',
+            'magenta',
+            'lime',
+            'pink',
+            'teal',
+            'lavender',
+            'brown',
+            'beige',
+            'maroon',
+            'mint',
+            'olive',
+            'coral',
+            'navy',
+            'grey',
+            'white',
+        ]
 
-		self.all_shapes = ['circle', 'square', 'cross', 'triangle', 'vbar', 'hbar'] + list(string.ascii_lowercase)
-		
-		self.all_spaces = ['left', 'right', 'top', 'bottom']
+        self.all_shapes = ['circle', 'square', 'cross', 'triangle', 'vbar', 'hbar'] + list(string.ascii_lowercase)
 
-		self.all_whens = ['now','latest','last1']
+        self.all_spaces = ['left', 'right', 'top', 'bottom']
 
-		self.input_vocab = ['invalid','.', ',', '?','object', 'color', 'shape','loc', 'on','if','then', 'else','exist','equal', 'and','the', 'of', 'with','point'] + self.all_spaces + self.all_colors + self.all_shapes + self.all_whens
-		self.output_vocab = ['true','false'] + self.all_colors + self.all_shapes
+        self.all_whens = ['now', 'latest', 'last1']
 
-		self.tasks = params['tasks']
-		if self.tasks == 'class':
-			self.tasks = self.classification_tasks
-		elif self.tasks == 'reg':
-			self.tasks = self.regression_tasks
-			self.output_vocab = []
-		elif self.tasks == 'all':
-			self.tasks = self.classification_tasks + self.regression_tasks
-		elif self.tasks == 'binary':
-			self.tasks = self.binary_tasks
-			self.output_vocab = ['true','false']
+        self.input_vocab = (
+            [
+                'invalid',
+                '.',
+                ',',
+                '?',
+                'object',
+                'color',
+                'shape',
+                'loc',
+                'on',
+                'if',
+                'then',
+                'else',
+                'exist',
+                'equal',
+                'and',
+                'the',
+                'of',
+                'with',
+                'point',
+            ]
+            + self.all_spaces
+            + self.all_colors
+            + self.all_shapes
+            + self.all_whens
+        )
+        self.output_vocab = ['true', 'false'] + self.all_colors + self.all_shapes
 
-		self.input_words = len(self.input_vocab)
-		self.output_classes = len(self.output_vocab)
+        self.tasks = params['tasks']
+        if self.tasks == 'class':
+            self.tasks = self.classification_tasks
+        elif self.tasks == 'reg':
+            self.tasks = self.regression_tasks
+            self.output_vocab = []
+        elif self.tasks == 'all':
+            self.tasks = self.classification_tasks + self.regression_tasks
+        elif self.tasks == 'binary':
+            self.tasks = self.binary_tasks
+            self.output_vocab = ['true', 'false']
 
-		# If loading a default dataset, set default path names and set sequence length		
-		if self.dataset_type == 'canonical':
-			self.examples_per_task = 227280
-			self.sequence_length = 4
-			self.memory_length = 3
-			self.max_distractors = 1
-		elif self.dataset_type == 'hard':
-			self.examples_per_task = 227280
-			self.sequence_length = 8
-			self.memory_length = 7
-			self.max_distractors = 10
-		elif self.dataset_type == 'generated':
-			self.params.add_default_params({'generation':{'nr_processors':1}})
-			try:
-				self.examples_per_task = int(params['generation']['examples_per_task'])
-				self.sequence_length = int(params['generation']['sequence_length'])
-				self.memory_length = int(params['generation']['memory_length'])
-				self.max_distractors = int(params['generation']['max_distractors'])
-				self.nr_processors = int(params['generation']['nr_processors'])
-			except KeyError:
-				self.logger.info("Please specify examples per task, sequence length, memory length and maximum distractors "
-					  "for a generated dataset under 'dataset_type'.")
-				exit(1)
-			except ValueError:
-				self.logger.info("Examples per task, sequence length, memory length, maximum distractors and nr_processors "
-					  "(if provided) must be of type int.")
-				exit(2)
+        self.input_words = len(self.input_vocab)
+        self.output_classes = len(self.output_vocab)
 
-		self.dataset_name = str(self.sequence_length)+'_'+str(self.memory_length)+'_'+str(self.max_distractors)
-		self.data_folder_parent = os.path.join(self.data_folder_main,'data_'+self.dataset_name) 
-		self.data_folder_child = os.path.join(self.data_folder_parent,self.set+'_'+self.dataset_name)
-		
-	def source_dataset(self):
-		"""
+        # If loading a default dataset, set default path names and set sequence length
+        if self.dataset_type == 'canonical':
+            self.examples_per_task = 227280
+            self.sequence_length = 4
+            self.memory_length = 3
+            self.max_distractors = 1
+        elif self.dataset_type == 'hard':
+            self.examples_per_task = 227280
+            self.sequence_length = 8
+            self.memory_length = 7
+            self.max_distractors = 10
+        elif self.dataset_type == 'generated':
+            self.params.add_default_params({'generation': {'nr_processors': 1}})
+            try:
+                self.examples_per_task = int(params['generation']['examples_per_task'])
+                self.sequence_length = int(params['generation']['sequence_length'])
+                self.memory_length = int(params['generation']['memory_length'])
+                self.max_distractors = int(params['generation']['max_distractors'])
+                self.nr_processors = int(params['generation']['nr_processors'])
+            except KeyError:
+                self.logger.info(
+                    "Please specify examples per task, sequence length, memory length and maximum distractors "
+                    "for a generated dataset under 'dataset_type'."
+                )
+                exit(1)
+            except ValueError:
+                self.logger.info(
+                    "Examples per task, sequence length, memory length, maximum distractors and nr_processors "
+                    "(if provided) must be of type int."
+                )
+                exit(2)
+
+        self.dataset_name = str(self.sequence_length) + '_' + str(self.memory_length) + '_' + str(self.max_distractors)
+        self.data_folder_parent = os.path.join(self.data_folder_main, 'data_' + self.dataset_name)
+        self.data_folder_child = os.path.join(self.data_folder_parent, self.set + '_' + self.dataset_name)
+
+    def source_dataset(self):
+        """
 		Handles downloading and unzipping the canonical or hard version of the dataset.
 
 		"""
-		self.download = False
-		if self.dataset_type == 'generated':
-			self.download = self.check_and_download(self.data_folder_child)
-			if self.download:			
-				from miprometheus.problems.seq_to_seq.vqa.cog.cog_utils import generate_dataset
-				generate_dataset.main(self.data_folder_parent,
-															self.examples_per_task, 
-															self.sequence_length, 
-															self.memory_length, 
-															self.max_distractors,
-															self.nr_processors)
-				self.logger.info('\nDataset generation complete for {}!'.format(self.dataset_name))
-				self.download = False
+        self.download = False
+        if self.dataset_type == 'generated':
+            self.download = self.check_and_download(self.data_folder_child)
+            if self.download:
+                from miprometheus.problems.seq_to_seq.vqa.cog.cog_utils import generate_dataset
 
-		if self.dataset_type == 'canonical':
-			self.download = self.check_and_download(self.data_folder_child, 
-												  'https://storage.googleapis.com/cog-datasets/data_4_3_1.tar')
-		
-		elif self.dataset_type == 'hard':
-			self.download = self.check_and_download(self.data_folder_child,
-												  'https://storage.googleapis.com/cog-datasets/data_8_7_10.tar')
-		if self.download:
-			self.logger.info('\nDownload complete. Extracting...')
-			tar = tarfile.open(os.path.expanduser('~/data/downloaded'))
-			tar.extractall(path=self.data_folder_main)
-			tar.close()
-			self.logger.info('\nDone! Cleaning up.')
-			os.remove(os.path.expanduser('~/data/downloaded'))
-			self.logger.info('\nClean-up complete! Dataset ready.')
+                generate_dataset.main(
+                    self.data_folder_parent,
+                    self.examples_per_task,
+                    self.sequence_length,
+                    self.memory_length,
+                    self.max_distractors,
+                    self.nr_processors,
+                )
+                self.logger.info('\nDataset generation complete for {}!'.format(self.dataset_name))
+                self.download = False
 
-	def add_statistics(self, stat_col):
-		"""
+        if self.dataset_type == 'canonical':
+            self.download = self.check_and_download(
+                self.data_folder_child, 'https://storage.googleapis.com/cog-datasets/data_4_3_1.tar'
+            )
+
+        elif self.dataset_type == 'hard':
+            self.download = self.check_and_download(
+                self.data_folder_child, 'https://storage.googleapis.com/cog-datasets/data_8_7_10.tar'
+            )
+        if self.download:
+            self.logger.info('\nDownload complete. Extracting...')
+            tar = tarfile.open(os.path.expanduser('~/data/downloaded'))
+            tar.extractall(path=self.data_folder_main)
+            tar.close()
+            self.logger.info('\nDone! Cleaning up.')
+            os.remove(os.path.expanduser('~/data/downloaded'))
+            self.logger.info('\nClean-up complete! Dataset ready.')
+
+    def add_statistics(self, stat_col):
+        """
         Add :py:class:`COG`-specific stats to :py:class:`miprometheus.utils.StatisticsCollector`.
 
         :param stat_col: :py:class:`miprometheus.utils.StatisticsCollector`.
 
         """
-		stat_col.add_statistic('loss_answer', '{:12.10f}')
-		stat_col.add_statistic('loss_pointing', '{:12.10f}')
-		stat_col.add_statistic('acc', '{:12.10f}')
-		stat_col.add_statistic('acc_answer', '{:12.10f}')
-		stat_col.add_statistic('acc_pointing', '{:12.10f}')
-		stat_col.add_statistic('AndCompareColor', '{:12.10f}')
-		stat_col.add_statistic('AndCompareShape', '{:12.10f}')
-		stat_col.add_statistic('AndSimpleCompareColor', '{:12.10f}')
-		stat_col.add_statistic('AndSimpleCompareShape', '{:12.10f}')
-		stat_col.add_statistic('CompareColor', '{:12.10f}')
-		stat_col.add_statistic('CompareShape', '{:12.10f}')
-		stat_col.add_statistic('Exist', '{:12.10f}')
-		stat_col.add_statistic('ExistColor', '{:12.10f}')
-		stat_col.add_statistic('ExistColorOf', '{:12.10f}')
-		stat_col.add_statistic('ExistColorSpace', '{:12.10f}')
-		stat_col.add_statistic('ExistLastColorSameShape', '{:12.10f}')
-		stat_col.add_statistic('ExistLastObjectSameObject', '{:12.10f}')
-		stat_col.add_statistic('ExistLastShapeSameColor', '{:12.10f}')
-		stat_col.add_statistic('ExistShape', '{:12.10f}')
-		stat_col.add_statistic('ExistShapeOf', '{:12.10f}')
-		stat_col.add_statistic('ExistShapeSpace', '{:12.10f}')
-		stat_col.add_statistic('ExistSpace', '{:12.10f}')
-		stat_col.add_statistic('GetColor', '{:12.10f}')
-		stat_col.add_statistic('GetColorSpace', '{:12.10f}')
-		stat_col.add_statistic('GetShape', '{:12.10f}')
-		stat_col.add_statistic('GetShapeSpace', '{:12.10f}')
-		stat_col.add_statistic('SimpleCompareShape', '{:12.10f}')
-		stat_col.add_statistic('SimpleCompareColor', '{:12.10f}')
-		stat_col.add_statistic('SimpleCompareShape', '{:12.10f}')
-		stat_col.add_statistic('AndSimpleExistColorGo', '{:12.10f}')
-		stat_col.add_statistic('AndSimpleExistGo', '{:12.10f}')
-		stat_col.add_statistic('AndSimpleExistShapeGo', '{:12.10f}')
-		stat_col.add_statistic('CompareColorGo', '{:12.10f}')
-		stat_col.add_statistic('CompareShapeGo', '{:12.10f}')
-		stat_col.add_statistic('ExistColorGo', '{:12.10f}')
-		stat_col.add_statistic('ExistColorSpaceGo', '{:12.10f}')
-		stat_col.add_statistic('ExistGo', '{:12.10f}')
-		stat_col.add_statistic('ExistShapeGo', '{:12.10f}')
-		stat_col.add_statistic('ExistShapeSpaceGo', '{:12.10f}')
-		stat_col.add_statistic('ExistSpaceGo', '{:12.10f}')
-		stat_col.add_statistic('Go', '{:12.10f}')
-		stat_col.add_statistic('GoColor', '{:12.10f}')
-		stat_col.add_statistic('GoColorOf', '{:12.10f}')
-		stat_col.add_statistic('GoShape', '{:12.10f}')
-		stat_col.add_statistic('GoShapeOf', '{:12.10f}')
-		stat_col.add_statistic('SimpleCompareColorGo', '{:12.10f}')
-		stat_col.add_statistic('SimpleCompareShapeGo', '{:12.10f}')
-		stat_col.add_statistic('SimpleExistColorGo', '{:12.10f}')
-		stat_col.add_statistic('SimpleExistGo', '{:12.10f}')
-		stat_col.add_statistic('SimpleCompareShape', '{:12.10f}')
-		stat_col.add_statistic('SimpleExistShapeGo', '{:12.10f}')
+        stat_col.add_statistic('loss_answer', '{:12.10f}')
+        stat_col.add_statistic('loss_pointing', '{:12.10f}')
+        stat_col.add_statistic('acc', '{:12.10f}')
+        stat_col.add_statistic('acc_answer', '{:12.10f}')
+        stat_col.add_statistic('acc_pointing', '{:12.10f}')
+        stat_col.add_statistic('AndCompareColor', '{:12.10f}')
+        stat_col.add_statistic('AndCompareShape', '{:12.10f}')
+        stat_col.add_statistic('AndSimpleCompareColor', '{:12.10f}')
+        stat_col.add_statistic('AndSimpleCompareShape', '{:12.10f}')
+        stat_col.add_statistic('CompareColor', '{:12.10f}')
+        stat_col.add_statistic('CompareShape', '{:12.10f}')
+        stat_col.add_statistic('Exist', '{:12.10f}')
+        stat_col.add_statistic('ExistColor', '{:12.10f}')
+        stat_col.add_statistic('ExistColorOf', '{:12.10f}')
+        stat_col.add_statistic('ExistColorSpace', '{:12.10f}')
+        stat_col.add_statistic('ExistLastColorSameShape', '{:12.10f}')
+        stat_col.add_statistic('ExistLastObjectSameObject', '{:12.10f}')
+        stat_col.add_statistic('ExistLastShapeSameColor', '{:12.10f}')
+        stat_col.add_statistic('ExistShape', '{:12.10f}')
+        stat_col.add_statistic('ExistShapeOf', '{:12.10f}')
+        stat_col.add_statistic('ExistShapeSpace', '{:12.10f}')
+        stat_col.add_statistic('ExistSpace', '{:12.10f}')
+        stat_col.add_statistic('GetColor', '{:12.10f}')
+        stat_col.add_statistic('GetColorSpace', '{:12.10f}')
+        stat_col.add_statistic('GetShape', '{:12.10f}')
+        stat_col.add_statistic('GetShapeSpace', '{:12.10f}')
+        stat_col.add_statistic('SimpleCompareShape', '{:12.10f}')
+        stat_col.add_statistic('SimpleCompareColor', '{:12.10f}')
+        stat_col.add_statistic('SimpleCompareShape', '{:12.10f}')
+        stat_col.add_statistic('AndSimpleExistColorGo', '{:12.10f}')
+        stat_col.add_statistic('AndSimpleExistGo', '{:12.10f}')
+        stat_col.add_statistic('AndSimpleExistShapeGo', '{:12.10f}')
+        stat_col.add_statistic('CompareColorGo', '{:12.10f}')
+        stat_col.add_statistic('CompareShapeGo', '{:12.10f}')
+        stat_col.add_statistic('ExistColorGo', '{:12.10f}')
+        stat_col.add_statistic('ExistColorSpaceGo', '{:12.10f}')
+        stat_col.add_statistic('ExistGo', '{:12.10f}')
+        stat_col.add_statistic('ExistShapeGo', '{:12.10f}')
+        stat_col.add_statistic('ExistShapeSpaceGo', '{:12.10f}')
+        stat_col.add_statistic('ExistSpaceGo', '{:12.10f}')
+        stat_col.add_statistic('Go', '{:12.10f}')
+        stat_col.add_statistic('GoColor', '{:12.10f}')
+        stat_col.add_statistic('GoColorOf', '{:12.10f}')
+        stat_col.add_statistic('GoShape', '{:12.10f}')
+        stat_col.add_statistic('GoShapeOf', '{:12.10f}')
+        stat_col.add_statistic('SimpleCompareColorGo', '{:12.10f}')
+        stat_col.add_statistic('SimpleCompareShapeGo', '{:12.10f}')
+        stat_col.add_statistic('SimpleExistColorGo', '{:12.10f}')
+        stat_col.add_statistic('SimpleExistGo', '{:12.10f}')
+        stat_col.add_statistic('SimpleCompareShape', '{:12.10f}')
+        stat_col.add_statistic('SimpleExistShapeGo', '{:12.10f}')
 
-	def collect_statistics(self, stat_col, data_dict, logits):
-		"""
+    def collect_statistics(self, stat_col, data_dict, logits):
+        """
         Collects dataset details.
         :param stat_col: :py:class:`miprometheus.utils.StatisticsCollector`.
         :param data_dict: :py:class:`miprometheus.utils.DataDict` containing targets.
         :param logits: Prediction of the model (:py:class:`torch.Tensor`)
         """
-		# Additional loss.
-		stat_col['loss_answer'] = self.loss_answer.cpu().item()
-		stat_col['loss_pointing'] = self.loss_pointing.cpu().item()
+        # Additional loss.
+        stat_col['loss_answer'] = self.loss_answer.cpu().item()
+        stat_col['loss_pointing'] = self.loss_pointing.cpu().item()
 
-		# Accuracies.
-		acc_total, acc_answer, acc_pointing = self.calculate_accuracy(data_dict, logits)
-		stat_col['acc'] = acc_total
-		stat_col['acc_answer'] = acc_answer
-		stat_col['acc_pointing'] = acc_pointing
+        # Accuracies.
+        acc_total, acc_answer, acc_pointing = self.calculate_accuracy(data_dict, logits)
+        stat_col['acc'] = acc_total
+        stat_col['acc_answer'] = acc_answer
+        stat_col['acc_pointing'] = acc_pointing
 
-		# Families Accuracies
-		families_accuracies_dic = self.get_acc_per_family(data_dict, logits)
+        # Families Accuracies
+        families_accuracies_dic = self.get_acc_per_family(data_dict, logits)
 
-		for key in families_accuracies_dic:
-			stat_col[key] = families_accuracies_dic[key][2]
-
-
-
-
-
+        for key in families_accuracies_dic:
+            stat_col[key] = families_accuracies_dic[key][2]
 
 
 if __name__ == "__main__":
-	
-	""" 
+
+    """ 
 	Unit test that checks data dimensions match expected values, and generates an image.
 	Checks one regression and one classification task.
 	"""
 
-	# Test parameters
-	batch_size = 44
-	sequence_nr = 1
+    # Test parameters
+    batch_size = 44
+    sequence_nr = 1
 
-	# Timing test parameters
-	timing_test = False
-	testbatches = 100
+    # Timing test parameters
+    timing_test = False
+    testbatches = 100
 
-	# -------------------------
+    # -------------------------
 
-	# Define useful params
-	from miprometheus.utils.param_interface import ParamInterface
-	params = ParamInterface()
-	tasks = ['AndCompareColor']
+    # Define useful params
+    from miprometheus.utils.param_interface import ParamInterface
 
+    params = ParamInterface()
+    tasks = ['AndCompareColor']
 
-	params.add_config_params({'data_folder': os.path.expanduser('~/data/cog'),
-							  'set': 'val',
-							  'dataset_type': 'canonical',
-							  'tasks': tasks})
+    params.add_config_params(
+        {'data_folder': os.path.expanduser('~/data/cog'), 'set': 'val', 'dataset_type': 'canonical', 'tasks': tasks}
+    )
 
-	# Create problem - task Go
-	cog_dataset = COG(params)
+    # Create problem - task Go
+    cog_dataset = COG(params)
 
-	# Get a sample - Go
-	#sample = cog_dataset[0]
+    # Get a sample - Go
+    # sample = cog_dataset[0]
 
-	# Test whether data structures match expected definitions
-#	assert sample['images'].shape == torch.ones((4, 3, 112, 112)).shape
-#	assert sample['tasks'] == ['Go']
-	#assert sample['questions'] == ['point now beige u']
-#	assert sample['targets_pointing'].shape == torch.ones((4,2)).shape
-#	assert len(sample['targets_answer']) == 4
-#	assert sample['targets_answer'][0] == ' '  
+    # Test whether data structures match expected definitions
+    # 	assert sample['images'].shape == torch.ones((4, 3, 112, 112)).shape
+    # 	assert sample['tasks'] == ['Go']
+    # assert sample['questions'] == ['point now beige u']
+    # 	assert sample['targets_pointing'].shape == torch.ones((4,2)).shape
+    # 	assert len(sample['targets_answer']) == 4
+    # 	assert sample['targets_answer'][0] == ' '
 
-	# Get another sample - CompareColor
-	sample2 = cog_dataset[1000]
-	#print(repr(sample2))
+    # Get another sample - CompareColor
+    sample2 = cog_dataset[1000]
+    # print(repr(sample2))
 
-	# Test whether data structures match expected definitions
-#	assert sample2['images'].shape == torch.ones((4, 3, 112, 112)).shape
-#	assert sample2['tasks'] == ['CompareColor']
-	#assert sample2['questions'] == ['color of latest g equal color of last1 v ?']
-#	assert sample2['targets_pointing'].shape == torch.ones((4,2)).shape
-#	assert len(sample2['targets_answer']) == 4
-#	assert sample2['targets_answer'][0] == 'invalid'  
-	
-	# Set up Dataloader iterator
-	from torch.utils.data import DataLoader
-	
-	dataloader = DataLoader(dataset=cog_dataset, collate_fn=cog_dataset.collate_fn,
-							batch_size=batch_size, shuffle=False, num_workers=8)
+    # Test whether data structures match expected definitions
+    # 	assert sample2['images'].shape == torch.ones((4, 3, 112, 112)).shape
+    # 	assert sample2['tasks'] == ['CompareColor']
+    # assert sample2['questions'] == ['color of latest g equal color of last1 v ?']
+    # 	assert sample2['targets_pointing'].shape == torch.ones((4,2)).shape
+    # 	assert len(sample2['targets_answer']) == 4
+    # 	assert sample2['targets_answer'][0] == 'invalid'
 
-	# Display single sample (0) from batch.
-	batch = next(iter(dataloader))
+    # Set up Dataloader iterator
+    from torch.utils.data import DataLoader
 
-	# VQA expects 'targets', so change 'targets_answer' to 'targets'
-	# Implement a data_dict.pop later.
-	batch['targets'] = batch['targets_pointing']
-	batch['targets_label'] = batch['targets_answer']
+    dataloader = DataLoader(
+        dataset=cog_dataset, collate_fn=cog_dataset.collate_fn, batch_size=batch_size, shuffle=False, num_workers=8
+    )
 
-	# Convert image to uint8
-	batch['images'] = batch['images']/(np.iinfo(np.uint16).max)*255
+    # Display single sample (0) from batch.
+    batch = next(iter(dataloader))
 
-	# Show sample - Task 1
-	cog_dataset.show_sample(batch,0,sequence_nr)
+    # VQA expects 'targets', so change 'targets_answer' to 'targets'
+    # Implement a data_dict.pop later.
+    batch['targets'] = batch['targets_pointing']
+    batch['targets_label'] = batch['targets_answer']
 
-	# Show sample - Task 2
-	cog_dataset.show_sample(batch,1,sequence_nr)	
+    # Convert image to uint8
+    batch['images'] = batch['images'] / (np.iinfo(np.uint16).max) * 255
 
+    # Show sample - Task 1
+    cog_dataset.show_sample(batch, 0, sequence_nr)
 
-	if timing_test:
-		# Test speed of generating images vs preloading generated images.
-		import time
+    # Show sample - Task 2
+    cog_dataset.show_sample(batch, 1, sequence_nr)
 
-		# Define params to load entire dataset - all tasks included
-		params = ParamInterface()
-		params.add_config_params({
-			'data_folder': '~/data/cog/',
-			'set': 'val',
-			'dataset_type': 'canonical',
-			'tasks': 'all'})
+    if timing_test:
+        # Test speed of generating images vs preloading generated images.
+        import time
 
-		preload = time.time()
-		full_cog_canonical = COG(params)
-		postload = time.time() 
+        # Define params to load entire dataset - all tasks included
+        params = ParamInterface()
+        params.add_config_params(
+            {'data_folder': '~/data/cog/', 'set': 'val', 'dataset_type': 'canonical', 'tasks': 'all'}
+        )
 
-		dataloader = DataLoader(dataset=full_cog_canonical, collate_fn=full_cog_canonical.collate_fn,
-								batch_size=batch_size, shuffle=True, num_workers=8)
+        preload = time.time()
+        full_cog_canonical = COG(params)
+        postload = time.time()
 
-		prebatch = time.time()
-		for i, batch in enumerate(dataloader):
-			if i == testbatches:
-				break
-			if i% 100 == 0:
-				print('Batch # {} - {}'.format(i, type(batch)))
-		postbatch = time.time()
-	
-		print('Number of workers: {}'.format(dataloader.num_workers))
-		print('Time taken to load the dataset: {}s'.format(postload - preload))	
-		print('Time taken to exhaust {} batches for a batch size of {} with image generation: {}s'.format(testbatches,
-																										  batch_size,
-																										  postbatch-prebatch))
-	
-		# Test pregeneration and loading
-		for i, batch in enumerate(dataloader):
-			if i == testbatches:
-				print('Finished saving {} batches'.format(testbatches))
-				break
-			if not os.path.exists(os.path.expanduser('~/data/cogtest')):
-				os.makedirs(os.path.expanduser('~/data/cogtest'))
-			np.save(os.path.expanduser('~/data/cogtest/'+str(i)),batch['images'])
+        dataloader = DataLoader(
+            dataset=full_cog_canonical,
+            collate_fn=full_cog_canonical.collate_fn,
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=8,
+        )
 
-		preload = time.time()
-		for i in range(testbatches):
-			mockload = np.fromfile(os.path.expanduser('~/data/cogtest/'+str(i)+'.npy'))
-		postload = time.time()
-		print('Generation time for {} batches: {}, Load time for {} batches: {}'.format(testbatches, postbatch-prebatch, 
-												testbatches, postload-preload))
+        prebatch = time.time()
+        for i, batch in enumerate(dataloader):
+            if i == testbatches:
+                break
+            if i % 100 == 0:
+                print('Batch # {} - {}'.format(i, type(batch)))
+        postbatch = time.time()
 
-		print('Timing test completed, removing files.')
-		for i in range(testbatches):
-			os.remove(os.path.expanduser('~/data/cogtest/'+str(i)+'.npy'))
+        print('Number of workers: {}'.format(dataloader.num_workers))
+        print('Time taken to load the dataset: {}s'.format(postload - preload))
+        print(
+            'Time taken to exhaust {} batches for a batch size of {} with image generation: {}s'.format(
+                testbatches, batch_size, postbatch - prebatch
+            )
+        )
 
-	print('Done!')
+        # Test pregeneration and loading
+        for i, batch in enumerate(dataloader):
+            if i == testbatches:
+                print('Finished saving {} batches'.format(testbatches))
+                break
+            if not os.path.exists(os.path.expanduser('~/data/cogtest')):
+                os.makedirs(os.path.expanduser('~/data/cogtest'))
+            np.save(os.path.expanduser('~/data/cogtest/' + str(i)), batch['images'])
 
+        preload = time.time()
+        for i in range(testbatches):
+            mockload = np.fromfile(os.path.expanduser('~/data/cogtest/' + str(i) + '.npy'))
+        postload = time.time()
+        print(
+            'Generation time for {} batches: {}, Load time for {} batches: {}'.format(
+                testbatches, postbatch - prebatch, testbatches, postload - preload
+            )
+        )
 
+        print('Timing test completed, removing files.')
+        for i in range(testbatches):
+            os.remove(os.path.expanduser('~/data/cogtest/' + str(i) + '.npy'))
+
+    print('Done!')
