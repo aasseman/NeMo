@@ -50,7 +50,7 @@ from bisect import bisect_left
 from collections import defaultdict
 
 import numpy as np
-from miprometheus.problems.seq_to_seq.video_text_to_class.cog.cog_utils import constants as const
+from . import constants as const
 from PIL import Image, ImageDraw, ImageFont
 
 # import cv2 as cv2

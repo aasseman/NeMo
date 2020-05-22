@@ -26,8 +26,7 @@ import tarfile
 import numpy as np
 import torch
 import torch.nn as nn
-from miprometheus.problems.seq_to_seq.video_text_to_class.cog.cog_utils import json_to_img as jti
-from miprometheus.problems.seq_to_seq.video_text_to_class.video_text_to_class_problem import VideoTextToClassProblem
+from .cog_utils import json_to_img as jti
 
 
 class COG(VideoTextToClassProblem):

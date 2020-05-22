@@ -37,8 +37,8 @@ Contains the building blocks for permissible tasks.
 import random
 from collections import defaultdict
 
-from miprometheus.problems.seq_to_seq.video_text_to_class.cog.cog_utils import constants as const
-from miprometheus.problems.seq_to_seq.video_text_to_class.cog.cog_utils import stim_generator as sg
+from . import constants as const
+from . import stim_generator as sg
 
 
 def obj_str(loc=None, color=None, shape=None, when=None, space_type=None):

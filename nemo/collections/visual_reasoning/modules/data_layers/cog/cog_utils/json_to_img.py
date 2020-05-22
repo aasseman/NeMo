@@ -34,8 +34,8 @@
 import re
 
 import numpy as np
-from miprometheus.problems.seq_to_seq.video_text_to_class.cog.cog_utils import constants as const
-from miprometheus.problems.seq_to_seq.video_text_to_class.cog.cog_utils import stim_generator as sg
+from . import constants as const
+from . import stim_generator as sg
 from six import string_types
 
 _R_MEAN = 123.68

@@ -39,7 +39,7 @@ import os
 import random
 import shutil
 
-import miprometheus.problems.seq_to_seq.video_text_to_class.cog.cog_utils.task_bank as task_bank
+from . import task_bank as task_bank
 import numpy as np
 
 try:

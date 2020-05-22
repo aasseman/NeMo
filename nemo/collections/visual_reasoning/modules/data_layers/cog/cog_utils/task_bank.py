@@ -34,9 +34,9 @@
 import random
 from collections import OrderedDict
 
-from miprometheus.problems.seq_to_seq.video_text_to_class.cog.cog_utils import stim_generator as sg
-from miprometheus.problems.seq_to_seq.video_text_to_class.cog.cog_utils import task_generator as tg
-from miprometheus.problems.seq_to_seq.video_text_to_class.cog.cog_utils.task_generator import Task
+from . import stim_generator as sg
+from . import task_generator as tg
+from .task_generator import Task
 
 
 class GoColor(Task):
