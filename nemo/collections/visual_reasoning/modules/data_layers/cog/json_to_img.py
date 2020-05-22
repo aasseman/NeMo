@@ -37,9 +37,8 @@
 import re
 
 import numpy as np
-from miprometheus.problems.seq_to_seq.video_text_to_class.cog.cog_utils import constants as const
-from miprometheus.problems.seq_to_seq.video_text_to_class.cog.cog_utils import stim_generator as sg
-from six import string_types
+from . import constants as const
+from . import stim_generator as sg
 
 _R_MEAN = 123.68
 _G_MEAN = 116.78
@@ -113,15 +112,15 @@ def set_outputs_from_targets(n_epoch, objsets, out_pnt_xy, out_word, mask_pnt, m
                 # For invalid target, no loss is used. Everything remains zero.
                 pass
             elif isinstance(target, (list, tuple)):
-                assert len(target) == 2, "Expected 2-D target. Got " + str(target)
+                assert len(target) == 2, f"Expected 2-D target. Got {str(target)}"
                 # minimize point loss
                 out_pnt_xy[j, :] = target
                 mask_pnt[j] = 1.0
-            elif isinstance(target, string_types):
+            elif isinstance(target, str):
                 out_word[j] = const.OUTPUTVOCABULARY.index(target)
                 mask_word[j] = 1.0
             else:
-                raise TypeError('Unknown target type: %s %s' % (type(target), target))
+                raise TypeError(f'Unknown target type: {type(target)} {target}')
             j += 1
 
 
@@ -163,7 +162,7 @@ def generate_batch(tasks, n_epoch=30, img_size=224, objsets=None, n_distractor=1
             )
 
     max_objset_epoch = max([objset.n_epoch for objset in objsets])
-    assert max_objset_epoch == n_epoch, '%d != %d' % (max_objset_epoch, n_epoch)
+    assert max_objset_epoch == n_epoch, f'{max_objset_epoch} != {n_epoch}'
 
     in_imgs = sg.render(objsets, img_size)
     # The rendered images are batch major
@@ -206,7 +205,7 @@ def static_objsets_from_examples(examples):
 
 
 def json_to_feeds(json_examples):
-    if isinstance(json_examples, string_types):
+    if isinstance(json_examples, str):
         json_examples = [json_examples]
 
     examples = []

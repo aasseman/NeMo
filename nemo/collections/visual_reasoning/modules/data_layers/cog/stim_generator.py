@@ -53,7 +53,7 @@ from bisect import bisect_left
 from collections import defaultdict
 
 import numpy as np
-from miprometheus.problems.seq_to_seq.video_text_to_class.cog.cog_utils import constants as const
+from . import constants as const
 from PIL import Image, ImageDraw, ImageFont
 
 # import cv2 as cv2
@@ -472,7 +472,7 @@ class ObjectSet(object):
             obj.epoch = [0, self.n_epoch]
         elif obj.when == 'now':
             obj.epoch = [epoch_now, epoch_now + 1]
-        elif (obj.when == 'last1') or (obj.when == 'latest'):
+        elif obj.when in ['last1', 'latest']:
             if obj.when == 'last1':
                 if epoch_now == 0:
                     return None
@@ -489,7 +489,7 @@ class ObjectSet(object):
             epoch = random.randint(epoch_range_left, epoch_range_right)
             obj.epoch = [epoch, epoch + 1]
         else:
-            raise NotImplementedError('When value: {:s} is not implemented'.format(str(obj.when)))
+            raise NotImplementedError(f'When value: {obj.when} is not implemented')
 
         # Insert and maintain order
         i = bisect_left(self.end_epoch, obj.epoch[1])
@@ -753,7 +753,7 @@ def render_static(objlists, img_size=224):
             for obj in epoch_objs:
                 render_static_obj(canvas, obj, img_size)
             i_frame += 1
-    assert i_frame == len(objlists) * n_epoch_max, '%d != %d' % (i_frame, len(objlists) * n_epoch_max)
+    assert i_frame == len(objlists) * n_epoch_max, f"{i_frame} != {len(objlists) * n_epoch_max}"
 
     return movie
 
@@ -970,7 +970,7 @@ def another_attr(attr):
     elif attr == const.INVALID:
         return attr
     else:
-        raise TypeError('Type {:s} of {:s} is not supported'.format(str(attr), str(type(attr))))
+        raise TypeError(f'Type {attr} of {type(attr)} is not supported')
 
 
 def another_colorshape(color_shape):
