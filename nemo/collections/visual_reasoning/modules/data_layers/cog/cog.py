@@ -22,7 +22,6 @@ import json
 import os
 import string
 import tarfile
-from collections import OrderedDict
 
 import numpy as np
 import torch
@@ -46,84 +45,6 @@ class COG(Dataset):
     for the reference paper.
 
     """
-
-    # Static constants
-
-    CLASSIFICATION_TASKS = [
-        'AndCompareColor',
-        'AndCompareShape',
-        'AndSimpleCompareColor',
-        'AndSimpleCompareShape',
-        'CompareColor',
-        'CompareShape',
-        'Exist',
-        'ExistColor',
-        'ExistColorOf',
-        'ExistColorSpace',
-        'ExistLastColorSameShape',
-        'ExistLastObjectSameObject',
-        'ExistLastShapeSameColor',
-        'ExistShape',
-        'ExistShapeOf',
-        'ExistShapeSpace',
-        'ExistSpace',
-        'GetColor',
-        'GetColorSpace',
-        'GetShape',
-        'GetShapeSpace',
-        'SimpleCompareColor',
-        'SimpleCompareShape',
-    ]
-
-    REGRESSION_TASKS = [
-        'AndSimpleExistColorGo',
-        'AndSimpleExistGo',
-        'AndSimpleExistShapeGo',
-        'CompareColorGo',
-        'CompareShapeGo',
-        'ExistColorGo',
-        'ExistColorSpaceGo',
-        'ExistGo',
-        'ExistShapeGo',
-        'ExistShapeSpaceGo',
-        'ExistSpaceGo',
-        'Go',
-        'GoColor',
-        'GoColorOf',
-        'GoShape',
-        'GoShapeOf',
-        'SimpleCompareColorGo',
-        'SimpleCompareShapeGo',
-        'SimpleExistColorGo',
-        'SimpleExistGo',
-        'SimpleExistShapeGo',
-    ]
-
-    BINARY_TASKS = [
-        'AndCompareColor',
-        'AndCompareShape',
-        'AndSimpleCompareColor',
-        'AndSimpleCompareShape',
-        'CompareColor',
-        'CompareShape',
-        'Exist',
-        'ExistColor',
-        'ExistColorOf',
-        'ExistColorSpace',
-        'ExistLastColorSameShape',
-        'ExistLastObjectSameObject',
-        'ExistLastShapeSameColor',
-        'ExistShape',
-        'ExistShapeOf',
-        'ExistShapeSpace',
-        'ExistSpace',
-        'SimpleCompareColor',
-        'SimpleCompareShape',
-    ]
-
-    CATEGORIES = CLASSIFICATION_TASKS + REGRESSION_TASKS + BINARY_TASKS
-    # Remove duplicates
-    CATEGORIES = list(OrderedDict.fromkeys(CATEGORIES))
 
     def __init__(
         self,
@@ -221,14 +142,14 @@ class COG(Dataset):
 
         self.tasks = cog_tasks
         if self.tasks == 'class':
-            self.tasks = COG.CLASSIFICATION_TASKS
+            self.tasks = constants.CLASSIFICATION_TASKS
         elif self.tasks == 'reg':
-            self.tasks = COG.REGRESSION_TASKS
+            self.tasks = constants.REGRESSION_TASKS
             self.output_vocab = []
         elif self.tasks == 'all':
-            self.tasks = COG.CLASSIFICATION_TASKS + COG.REGRESSION_TASKS
+            self.tasks = constants.CLASSIFICATION_TASKS + constants.REGRESSION_TASKS
         elif self.tasks == 'binary':
-            self.tasks = COG.BINARY_TASKS
+            self.tasks = constants.BINARY_TASKS
             self.output_vocab = ['true', 'false']
 
         self.input_words = len(constants.INPUTVOCABULARY)
@@ -319,7 +240,7 @@ class COG(Dataset):
 
         self.length = len(self.dataset)
 
-        self.tuple_list = [[0, 0, 0] for _ in range(len(COG.CATEGORIES))]
+        self.tuple_list = [[0, 0, 0] for _ in range(len(constants.CATEGORIES))]
 
     def evaluate_loss(self, data_dict, logits):
         """
@@ -495,7 +416,7 @@ class COG(Dataset):
         targets_pointing = data_dict['targets_pointing']
 
         # build dictionary to store acc families stats
-        categories_stats = dict(zip(COG.CATEGORIES, self.tuple_list))
+        categories_stats = dict(zip(constants.CATEGORIES, self.tuple_list))
 
         # Get tasks
         tasks = data_dict['tasks']
@@ -649,7 +570,7 @@ class COG(Dataset):
         # Set targets - depending on the answers.
         answers = self.dataset[index]['answers']
         data_dict['answers_string'] = self.dataset[index]['answers']
-        if data_dict['tasks'] in COG.CLASSIFICATION_TASKS:
+        if data_dict['tasks'] in constants.CLASSIFICATION_TASKS:
             data_dict['targets_answer'] = self.output_class_to_int(answers)
         else:
             data_dict['targets_answer'] = torch.LongTensor([-1 for target in answers])
@@ -737,7 +658,7 @@ class COG(Dataset):
         :param stat_col: :py:class:`miprometheus.utils.StatisticsCollector`.
 
         """
-        for stat in ['loss_answer', 'loss_pointing', 'acc', 'acc_answer', 'acc_pointing'] + COG.CATEGORIES:
+        for stat in ['loss_answer', 'loss_pointing', 'acc', 'acc_answer', 'acc_pointing'] + constants.CATEGORIES:
             stat_col.add_statistic(stat, '{:12.10f}')
 
     def collect_statistics(self, stat_col, data_dict, logits):

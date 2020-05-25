@@ -39,8 +39,9 @@ import os
 import random
 import shutil
 
-from . import task_bank as task_bank
 import numpy as np
+
+from . import task_bank as task_bank
 
 try:
     range_fn = xrange  # py 2

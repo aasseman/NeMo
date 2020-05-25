@@ -33,6 +33,7 @@
 
 import itertools
 import string
+from collections import OrderedDict
 
 import numpy as np
 
@@ -156,3 +157,79 @@ prefs_y = prefs_y.flatten().astype('float32')
 # numpy array (Grid_size**2, 2)
 PREFS = (np.array([prefs_x, prefs_y]).astype('float32')).T
 # PREFS = get_prefs(GRID_SIZE)
+
+CLASSIFICATION_TASKS = [
+    'AndCompareColor',
+    'AndCompareShape',
+    'AndSimpleCompareColor',
+    'AndSimpleCompareShape',
+    'CompareColor',
+    'CompareShape',
+    'Exist',
+    'ExistColor',
+    'ExistColorOf',
+    'ExistColorSpace',
+    'ExistLastColorSameShape',
+    'ExistLastObjectSameObject',
+    'ExistLastShapeSameColor',
+    'ExistShape',
+    'ExistShapeOf',
+    'ExistShapeSpace',
+    'ExistSpace',
+    'GetColor',
+    'GetColorSpace',
+    'GetShape',
+    'GetShapeSpace',
+    'SimpleCompareColor',
+    'SimpleCompareShape',
+]
+
+REGRESSION_TASKS = [
+    'AndSimpleExistColorGo',
+    'AndSimpleExistGo',
+    'AndSimpleExistShapeGo',
+    'CompareColorGo',
+    'CompareShapeGo',
+    'ExistColorGo',
+    'ExistColorSpaceGo',
+    'ExistGo',
+    'ExistShapeGo',
+    'ExistShapeSpaceGo',
+    'ExistSpaceGo',
+    'Go',
+    'GoColor',
+    'GoColorOf',
+    'GoShape',
+    'GoShapeOf',
+    'SimpleCompareColorGo',
+    'SimpleCompareShapeGo',
+    'SimpleExistColorGo',
+    'SimpleExistGo',
+    'SimpleExistShapeGo',
+]
+
+BINARY_TASKS = [
+    'AndCompareColor',
+    'AndCompareShape',
+    'AndSimpleCompareColor',
+    'AndSimpleCompareShape',
+    'CompareColor',
+    'CompareShape',
+    'Exist',
+    'ExistColor',
+    'ExistColorOf',
+    'ExistColorSpace',
+    'ExistLastColorSameShape',
+    'ExistLastObjectSameObject',
+    'ExistLastShapeSameColor',
+    'ExistShape',
+    'ExistShapeOf',
+    'ExistShapeSpace',
+    'ExistSpace',
+    'SimpleCompareColor',
+    'SimpleCompareShape',
+]
+
+CATEGORIES = CLASSIFICATION_TASKS + REGRESSION_TASKS + BINARY_TASKS
+# Remove duplicates
+CATEGORIES = list(OrderedDict.fromkeys(CATEGORIES))

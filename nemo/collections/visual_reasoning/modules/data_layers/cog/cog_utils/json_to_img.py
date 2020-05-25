@@ -34,9 +34,10 @@
 import re
 
 import numpy as np
+from six import string_types
+
 from . import constants as const
 from . import stim_generator as sg
-from six import string_types
 
 _R_MEAN = 123.68
 _G_MEAN = 116.78

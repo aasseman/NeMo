@@ -50,8 +50,9 @@ from bisect import bisect_left
 from collections import defaultdict
 
 import numpy as np
-from . import constants as const
 from PIL import Image, ImageDraw, ImageFont
+
+from . import constants as const
 
 # import cv2 as cv2
 
