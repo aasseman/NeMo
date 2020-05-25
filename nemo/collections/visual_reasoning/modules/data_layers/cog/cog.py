@@ -549,7 +549,7 @@ class COG(Dataset):
 
         # Images [BATCH_SIZE x IMG_SEQ_LEN x DEPTH x HEIGHT x WIDTH].
         images = ((torch.from_numpy(in_imgs)).permute(1, 0, 4, 2, 3)).squeeze()
-        data_dict['images'] = images
+        data_dict['images'] = images / 255 # Rescale RGB float from [0..255] to [0..1]
 
         # Set masks used in loss/accuracy calculations.
         data_dict['masks_pnt'] = torch.from_numpy(mask_pnt).type(torch.ByteTensor)
@@ -806,9 +806,6 @@ if __name__ == "__main__":
     # Implement a data_dict.pop later.
     batch['targets'] = batch['targets_pointing']
     batch['targets_label'] = batch['targets_answer']
-
-    # Convert image to uint8
-    batch['images'] = batch['images'] / (np.iinfo(np.uint16).max) * 255
 
     # Show sample - Task 1
     cog_dataset.show_sample(batch, 0, sequence_nr)
