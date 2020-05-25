@@ -26,7 +26,11 @@ import tarfile
 import numpy as np
 import torch
 import torch.nn as nn
+from orderedset import OrderedSet
+
 from .cog_utils import json_to_img as jti
+from .cog_utils import generate_dataset
+from .cog_utils import constants
 
 
 class COG(VideoTextToClassProblem):
@@ -40,6 +44,83 @@ class COG(VideoTextToClassProblem):
 	for the reference paper.
 
 	"""
+
+    # Static constants
+
+    CLASSIFICATION_TASKS = OrderedSet(
+        'AndCompareColor',
+        'AndCompareShape',
+        'AndSimpleCompareColor',
+        'AndSimpleCompareShape',
+        'CompareColor',
+        'CompareShape',
+        'Exist',
+        'ExistColor',
+        'ExistColorOf',
+        'ExistColorSpace',
+        'ExistLastColorSameShape',
+        'ExistLastObjectSameObject',
+        'ExistLastShapeSameColor',
+        'ExistShape',
+        'ExistShapeOf',
+        'ExistShapeSpace',
+        'ExistSpace',
+        'GetColor',
+        'GetColorSpace',
+        'GetShape',
+        'GetShapeSpace',
+        'SimpleCompareColor',
+        'SimpleCompareShape',
+    )
+
+    REGRESSION_TASKS = OrderedSet(
+        'AndSimpleExistColorGo',
+        'AndSimpleExistGo',
+        'AndSimpleExistShapeGo',
+        'CompareColorGo',
+        'CompareShapeGo',
+        'ExistColorGo',
+        'ExistColorSpaceGo',
+        'ExistGo',
+        'ExistShapeGo',
+        'ExistShapeSpaceGo',
+        'ExistSpaceGo',
+        'Go',
+        'GoColor',
+        'GoColorOf',
+        'GoShape',
+        'GoShapeOf',
+        'SimpleCompareColorGo',
+        'SimpleCompareShapeGo',
+        'SimpleExistColorGo',
+        'SimpleExistGo',
+        'SimpleExistShapeGo',
+    )
+
+    BINARY_TASKS = OrderedSet(
+        'AndCompareColor',
+        'AndCompareShape',
+        'AndSimpleCompareColor',
+        'AndSimpleCompareShape',
+        'CompareColor',
+        'CompareShape',
+        'Exist',
+        'ExistColor',
+        'ExistColorOf',
+        'ExistColorSpace',
+        'ExistLastColorSameShape',
+        'ExistLastObjectSameObject',
+        'ExistLastShapeSameColor',
+        'ExistShape',
+        'ExistShapeOf',
+        'ExistShapeSpace',
+        'ExistSpace',
+        'SimpleCompareColor',
+        'SimpleCompareShape',
+    )
+
+    CATEGORIES = CLASSIFICATION_TASKS + REGRESSION_TASKS + BINARY_TASKS
+
 
     def __init__(self, params):
         """
@@ -126,12 +207,16 @@ class COG(VideoTextToClassProblem):
             'val',
             'test',
             'train',
-        ], "set in configuration file must be one of 'val', 'test', or " "'train', got {}".format(self.set)
+        ], f"set in configuration file must be one of 'val', 'test', or " "'train', got {self.set}"
         self.dataset_type = params['dataset_type']
         assert self.dataset_type in ['canonical', 'hard', 'generated'], (
             "dataset in configuration file must be one of "
-            "'canonical', 'hard', or 'generated', got {}".format(self.dataset_type)
+            f"'canonical', 'hard', or 'generated', got {self.dataset_type}"
         )
+
+        # Changes depending on the tasks -- set by `parse_tasks_and_dataset_type`
+        # The complete "maximal" output_vocab is in constants.OUTPUTVOCABULARY
+        self.OUTPUT_VOCAB = None
 
         # Parse task and dataset_type
         self.parse_tasks_and_dataset_type(params)
@@ -225,54 +310,7 @@ class COG(VideoTextToClassProblem):
             self.logger.info("COG initialization complete.")
             exit(0)
 
-        self.categories = [
-            'AndCompareColor',
-            'AndCompareShape',
-            'AndSimpleCompareColor',
-            'AndSimpleCompareShape',
-            'CompareColor',
-            'CompareShape',
-            'Exist',
-            'ExistColor',
-            'ExistColorOf',
-            'ExistColorSpace',
-            'ExistLastColorSameShape',
-            'ExistLastObjectSameObject',
-            'ExistLastShapeSameColor',
-            'ExistShape',
-            'ExistShapeOf',
-            'ExistShapeSpace',
-            'ExistSpace',
-            'GetColor',
-            'GetColorSpace',
-            'GetShape',
-            'GetShapeSpace',
-            'SimpleCompareColor',
-            'SimpleCompareShape',
-            'AndSimpleExistColorGo',
-            'AndSimpleExistGo',
-            'AndSimpleExistShapeGo',
-            'CompareColorGo',
-            'CompareShapeGo',
-            'ExistColorGo',
-            'ExistColorSpaceGo',
-            'ExistGo',
-            'ExistShapeGo',
-            'ExistShapeSpaceGo',
-            'ExistSpaceGo',
-            'Go',
-            'GoColor',
-            'GoColorOf',
-            'GoShape',
-            'GoShapeOf',
-            'SimpleCompareColorGo',
-            'SimpleCompareShapeGo',
-            'SimpleExistColorGo',
-            'SimpleExistGo',
-            'SimpleExistShapeGo',
-        ]
-
-        self.tuple_list = [[0, 0, 0] for _ in range(len(self.categories))]
+        self.tuple_list = [[0, 0, 0] for _ in range(len(COG.CATEGORIES))]
 
     def evaluate_loss(self, data_dict, logits):
         """
@@ -448,56 +486,7 @@ class COG(VideoTextToClassProblem):
         targets_pointing = data_dict['targets_pointing']
 
         # build dictionary to store acc families stats
-
-        categories = [
-            'AndCompareColor',
-            'AndCompareShape',
-            'AndSimpleCompareColor',
-            'AndSimpleCompareShape',
-            'CompareColor',
-            'CompareShape',
-            'Exist',
-            'ExistColor',
-            'ExistColorOf',
-            'ExistColorSpace',
-            'ExistLastColorSameShape',
-            'ExistLastObjectSameObject',
-            'ExistLastShapeSameColor',
-            'ExistShape',
-            'ExistShapeOf',
-            'ExistShapeSpace',
-            'ExistSpace',
-            'GetColor',
-            'GetColorSpace',
-            'GetShape',
-            'GetShapeSpace',
-            'SimpleCompareColor',
-            'SimpleCompareShape',
-            'AndSimpleExistColorGo',
-            'AndSimpleExistGo',
-            'AndSimpleExistShapeGo',
-            'CompareColorGo',
-            'CompareShapeGo',
-            'ExistColorGo',
-            'ExistColorSpaceGo',
-            'ExistGo',
-            'ExistShapeGo',
-            'ExistShapeSpaceGo',
-            'ExistSpaceGo',
-            'Go',
-            'GoColor',
-            'GoColorOf',
-            'GoShape',
-            'GoShapeOf',
-            'SimpleCompareColorGo',
-            'SimpleCompareShapeGo',
-            'SimpleExistColorGo',
-            'SimpleExistGo',
-            'SimpleExistShapeGo',
-        ]
-
-        tuple_list = [[0, 0, 0] for _ in range(len(self.categories))]
-        categories_stats = dict(zip(categories, tuple_list))
+        categories_stats = dict(zip(COG.CATEGORIES, self.tuple_list))
 
         # Get tasks
         tasks = data_dict['tasks']
@@ -588,7 +577,7 @@ class COG(VideoTextToClassProblem):
 
     def output_class_to_int(self, targets_answer):
         # for j, target in enumerate(targets_answer):
-        targets_answer = [-1 if a == 'invalid' else self.output_vocab.index(a) for a in targets_answer]
+        targets_answer = [-1 if a == 'invalid' else self.OUTPUT_VOCAB.index(a) for a in targets_answer]
         targets_answer = torch.LongTensor(targets_answer)
         return targets_answer
 
@@ -638,7 +627,7 @@ class COG(VideoTextToClassProblem):
 
         data_dict['questions_string'] = [self.dataset[index]['question']]
         data_dict['questions'] = torch.LongTensor(
-            [self.input_vocab.index(word) for word in data_dict['questions'][0].split()]
+            [constants.INPUTVOCABULARY.index(word) for word in data_dict['questions'][0].split()]
         )
         if data_dict['questions'].size(0) <= self.nwords:
             prev_size = data_dict['questions'].size(0)
@@ -648,7 +637,7 @@ class COG(VideoTextToClassProblem):
         # Set targets - depending on the answers.
         answers = self.dataset[index]['answers']
         data_dict['answers_string'] = self.dataset[index]['answers']
-        if data_dict['tasks'] in self.classification_tasks:
+        if data_dict['tasks'] in COG.CLASSIFICATION_TASKS:
             data_dict['targets_answer'] = self.output_class_to_int(answers)
         else:
             data_dict['targets_answer'] = torch.LongTensor([-1 for target in answers])
@@ -685,7 +674,7 @@ class COG(VideoTextToClassProblem):
         data_dict['masks_word'] = torch.stack([sample['masks_word'] for sample in batch]).type(
             self.app_state.ByteTensor
         )
-        data_dict['vocab'] = self.output_vocab
+        data_dict['vocab'] = self.OUTPUT_VOCAB
 
         # strings question and answer
         data_dict['questions_string'] = [question['questions_string'] for question in batch]
@@ -702,145 +691,24 @@ class COG(VideoTextToClassProblem):
 
 		"""
 
-        self.classification_tasks = [
-            'AndCompareColor',
-            'AndCompareShape',
-            'AndSimpleCompareColor',
-            'AndSimpleCompareShape',
-            'CompareColor',
-            'CompareShape',
-            'Exist',
-            'ExistColor',
-            'ExistColorOf',
-            'ExistColorSpace',
-            'ExistLastColorSameShape',
-            'ExistLastObjectSameObject',
-            'ExistLastShapeSameColor',
-            'ExistShape',
-            'ExistShapeOf',
-            'ExistShapeSpace',
-            'ExistSpace',
-            'GetColor',
-            'GetColorSpace',
-            'GetShape',
-            'GetShapeSpace',
-            'SimpleCompareColor',
-            'SimpleCompareShape',
-        ]
-
-        self.regression_tasks = [
-            'AndSimpleExistColorGo',
-            'AndSimpleExistGo',
-            'AndSimpleExistShapeGo',
-            'CompareColorGo',
-            'CompareShapeGo',
-            'ExistColorGo',
-            'ExistColorSpaceGo',
-            'ExistGo',
-            'ExistShapeGo',
-            'ExistShapeSpaceGo',
-            'ExistSpaceGo',
-            'Go',
-            'GoColor',
-            'GoColorOf',
-            'GoShape',
-            'GoShapeOf',
-            'SimpleCompareColorGo',
-            'SimpleCompareShapeGo',
-            'SimpleExistColorGo',
-            'SimpleExistGo',
-            'SimpleExistShapeGo',
-        ]
-
-        self.binary_tasks = [
-            'AndCompareColor',
-            'AndCompareShape',
-            'AndSimpleCompareColor',
-            'AndSimpleCompareShape',
-            'CompareColor',
-            'CompareShape',
-            'Exist',
-            'ExistColor',
-            'ExistColorOf',
-            'ExistColorSpace',
-            'ExistLastColorSameShape',
-            'ExistLastObjectSameObject',
-            'ExistLastShapeSameColor',
-            'ExistShape',
-            'ExistShapeOf',
-            'ExistShapeSpace',
-            'ExistSpace',
-            'SimpleCompareColor',
-            'SimpleCompareShape',
-        ]
-
-        self.all_colors = ['red', 'green', 'blue', 'yellow', 'purple', 'orange'] + [
-            'cyan',
-            'magenta',
-            'lime',
-            'pink',
-            'teal',
-            'lavender',
-            'brown',
-            'beige',
-            'maroon',
-            'mint',
-            'olive',
-            'coral',
-            'navy',
-            'grey',
-            'white',
-        ]
-
-        self.all_shapes = ['circle', 'square', 'cross', 'triangle', 'vbar', 'hbar'] + list(string.ascii_lowercase)
-
-        self.all_spaces = ['left', 'right', 'top', 'bottom']
-
-        self.all_whens = ['now', 'latest', 'last1']
-
-        self.input_vocab = (
-            [
-                'invalid',
-                '.',
-                ',',
-                '?',
-                'object',
-                'color',
-                'shape',
-                'loc',
-                'on',
-                'if',
-                'then',
-                'else',
-                'exist',
-                'equal',
-                'and',
-                'the',
-                'of',
-                'with',
-                'point',
-            ]
-            + self.all_spaces
-            + self.all_colors
-            + self.all_shapes
-            + self.all_whens
-        )
-        self.output_vocab = ['true', 'false'] + self.all_colors + self.all_shapes
+        # Default output vocab
+        self.OUTPUT_VOCAB = constants.OUTPUTVOCABULARY
 
         self.tasks = params['tasks']
         if self.tasks == 'class':
-            self.tasks = self.classification_tasks
+            self.tasks = COG.CLASSIFICATION_TASKS
         elif self.tasks == 'reg':
-            self.tasks = self.regression_tasks
-            self.output_vocab = []
+            self.tasks = COG.REGRESSION_TASKS
+            self.OUTPUT_VOCAB = OrderedSet()
         elif self.tasks == 'all':
-            self.tasks = self.classification_tasks + self.regression_tasks
+            self.tasks = COG.CLASSIFICATION_TASKS + COG.REGRESSION_TASKS
+            self.OUTPUT_VOCAB = constants.OUTPUTVOCABULARY
         elif self.tasks == 'binary':
-            self.tasks = self.binary_tasks
-            self.output_vocab = ['true', 'false']
+            self.tasks = COG.BINARY_TASKS
+            self.OUTPUT_VOCAB = OrderedSet('true', 'false')
 
-        self.input_words = len(self.input_vocab)
-        self.output_classes = len(self.output_vocab)
+        self.input_words = len(constants.INPUTVOCABULARY)
+        self.output_classes = len(self.OUTPUT_VOCAB)
 
         # If loading a default dataset, set default path names and set sequence length
         if self.dataset_type == 'canonical':
@@ -887,8 +755,6 @@ class COG(VideoTextToClassProblem):
         if self.dataset_type == 'generated':
             self.download = self.check_and_download(self.data_folder_child)
             if self.download:
-                from miprometheus.problems.seq_to_seq.vqa.cog.cog_utils import generate_dataset
-
                 generate_dataset.main(
                     self.data_folder_parent,
                     self.examples_per_task,
@@ -897,7 +763,7 @@ class COG(VideoTextToClassProblem):
                     self.max_distractors,
                     self.nr_processors,
                 )
-                self.logger.info('\nDataset generation complete for {}!'.format(self.dataset_name))
+                self.logger.info(f'\nDataset generation complete for {self.dataset_name}!')
                 self.download = False
 
         if self.dataset_type == 'canonical':
@@ -925,57 +791,8 @@ class COG(VideoTextToClassProblem):
         :param stat_col: :py:class:`miprometheus.utils.StatisticsCollector`.
 
         """
-        stat_col.add_statistic('loss_answer', '{:12.10f}')
-        stat_col.add_statistic('loss_pointing', '{:12.10f}')
-        stat_col.add_statistic('acc', '{:12.10f}')
-        stat_col.add_statistic('acc_answer', '{:12.10f}')
-        stat_col.add_statistic('acc_pointing', '{:12.10f}')
-        stat_col.add_statistic('AndCompareColor', '{:12.10f}')
-        stat_col.add_statistic('AndCompareShape', '{:12.10f}')
-        stat_col.add_statistic('AndSimpleCompareColor', '{:12.10f}')
-        stat_col.add_statistic('AndSimpleCompareShape', '{:12.10f}')
-        stat_col.add_statistic('CompareColor', '{:12.10f}')
-        stat_col.add_statistic('CompareShape', '{:12.10f}')
-        stat_col.add_statistic('Exist', '{:12.10f}')
-        stat_col.add_statistic('ExistColor', '{:12.10f}')
-        stat_col.add_statistic('ExistColorOf', '{:12.10f}')
-        stat_col.add_statistic('ExistColorSpace', '{:12.10f}')
-        stat_col.add_statistic('ExistLastColorSameShape', '{:12.10f}')
-        stat_col.add_statistic('ExistLastObjectSameObject', '{:12.10f}')
-        stat_col.add_statistic('ExistLastShapeSameColor', '{:12.10f}')
-        stat_col.add_statistic('ExistShape', '{:12.10f}')
-        stat_col.add_statistic('ExistShapeOf', '{:12.10f}')
-        stat_col.add_statistic('ExistShapeSpace', '{:12.10f}')
-        stat_col.add_statistic('ExistSpace', '{:12.10f}')
-        stat_col.add_statistic('GetColor', '{:12.10f}')
-        stat_col.add_statistic('GetColorSpace', '{:12.10f}')
-        stat_col.add_statistic('GetShape', '{:12.10f}')
-        stat_col.add_statistic('GetShapeSpace', '{:12.10f}')
-        stat_col.add_statistic('SimpleCompareShape', '{:12.10f}')
-        stat_col.add_statistic('SimpleCompareColor', '{:12.10f}')
-        stat_col.add_statistic('SimpleCompareShape', '{:12.10f}')
-        stat_col.add_statistic('AndSimpleExistColorGo', '{:12.10f}')
-        stat_col.add_statistic('AndSimpleExistGo', '{:12.10f}')
-        stat_col.add_statistic('AndSimpleExistShapeGo', '{:12.10f}')
-        stat_col.add_statistic('CompareColorGo', '{:12.10f}')
-        stat_col.add_statistic('CompareShapeGo', '{:12.10f}')
-        stat_col.add_statistic('ExistColorGo', '{:12.10f}')
-        stat_col.add_statistic('ExistColorSpaceGo', '{:12.10f}')
-        stat_col.add_statistic('ExistGo', '{:12.10f}')
-        stat_col.add_statistic('ExistShapeGo', '{:12.10f}')
-        stat_col.add_statistic('ExistShapeSpaceGo', '{:12.10f}')
-        stat_col.add_statistic('ExistSpaceGo', '{:12.10f}')
-        stat_col.add_statistic('Go', '{:12.10f}')
-        stat_col.add_statistic('GoColor', '{:12.10f}')
-        stat_col.add_statistic('GoColorOf', '{:12.10f}')
-        stat_col.add_statistic('GoShape', '{:12.10f}')
-        stat_col.add_statistic('GoShapeOf', '{:12.10f}')
-        stat_col.add_statistic('SimpleCompareColorGo', '{:12.10f}')
-        stat_col.add_statistic('SimpleCompareShapeGo', '{:12.10f}')
-        stat_col.add_statistic('SimpleExistColorGo', '{:12.10f}')
-        stat_col.add_statistic('SimpleExistGo', '{:12.10f}')
-        stat_col.add_statistic('SimpleCompareShape', '{:12.10f}')
-        stat_col.add_statistic('SimpleExistShapeGo', '{:12.10f}')
+        for stat in ['loss_answer', 'loss_pointing', 'acc', 'acc_answer', 'acc_pointing'] + COG.CATEGORIES:
+            stat_col.add_statistic(stat, '{:12.10f}')
 
     def collect_statistics(self, stat_col, data_dict, logits):
         """
@@ -1105,21 +922,17 @@ if __name__ == "__main__":
             if i == testbatches:
                 break
             if i % 100 == 0:
-                print('Batch # {} - {}'.format(i, type(batch)))
+                print(f'Batch # {i} - {type(batch)}')
         postbatch = time.time()
 
-        print('Number of workers: {}'.format(dataloader.num_workers))
-        print('Time taken to load the dataset: {}s'.format(postload - preload))
-        print(
-            'Time taken to exhaust {} batches for a batch size of {} with image generation: {}s'.format(
-                testbatches, batch_size, postbatch - prebatch
-            )
-        )
+        print(f'Number of workers: {dataloader.num_workers}')
+        print(f'Time taken to load the dataset: {postload - preload}s')
+        print(f'Time taken to exhaust {testbatches} batches for a batch size of {batch_size} with image generation: {postbatch - prebatch}s')
 
         # Test pregeneration and loading
         for i, batch in enumerate(dataloader):
             if i == testbatches:
-                print('Finished saving {} batches'.format(testbatches))
+                print(f'Finished saving {testbatches} batches')
                 break
             if not os.path.exists(os.path.expanduser('~/data/cogtest')):
                 os.makedirs(os.path.expanduser('~/data/cogtest'))
@@ -1129,11 +942,7 @@ if __name__ == "__main__":
         for i in range(testbatches):
             mockload = np.fromfile(os.path.expanduser('~/data/cogtest/' + str(i) + '.npy'))
         postload = time.time()
-        print(
-            'Generation time for {} batches: {}, Load time for {} batches: {}'.format(
-                testbatches, postbatch - prebatch, testbatches, postload - preload
-            )
-        )
+        print(f'Generation time for {testbatches} batches: {postbatch - prebatch}, Load time for {testbatches} batches: {postload - preload}')
 
         print('Timing test completed, removing files.')
         for i in range(testbatches):
