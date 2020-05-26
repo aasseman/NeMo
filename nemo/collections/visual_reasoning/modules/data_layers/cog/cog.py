@@ -704,7 +704,7 @@ class COG(Dataset):
             stat_col[key] = families_accuracies_dic[key][2]
 
     @staticmethod
-    def show_sample(batch, sample_number=0, sequence_number=0):
+    def show_sample(batch, sample_number=0):
         """
         Shows a sample from the batch.
 
@@ -713,14 +713,11 @@ class COG(Dataset):
 
         :param sample_number: Number of sample in batch (default: 0)
         :type sample_number: int
-
-        :param sequence_number: Which image in the sequence to display (default: 0)
-        :type sequence_number: int
-
         """
+
         import matplotlib.pyplot as plt
 
-        # Unpack dict.
+        # Transpose, pick desired sample, unpack
         (
             images,
             tasks,
@@ -731,35 +728,34 @@ class COG(Dataset):
             mask_word,
             questions_string,
             answers_string,
-        ) = batch
-        targets = targets_pointing
-        labels = targets_answer
-
-        # Get sample.
-        images = images[sample_number].cpu().detach().numpy()
-        targets = targets[sample_number].cpu().detach().numpy()
-        labels = labels[sample_number]
-        question = questions[sample_number]
-
-        # Get image and label in sequence.
-        image = images[sequence_number]
-        target = targets[sequence_number]
-        label = labels[sequence_number]
-
-        # Reshape image.
-        if image.shape[0] == 1:
-            # This is a single channel image - get rid of this dimension
-            image = np.squeeze(image, axis=0)
-        else:
-            # More channels - move channels to axis2, according to matplotilb documentation.
-            # (X : array_like, shape (n, m) or (n, m, 3) or (n, m, 4))
-            image = image.transpose(1, 2, 0)
+        ) = list(zip(*batch))[sample_number]
 
         # show data.
-        plt.xlabel('num_columns')
-        plt.ylabel('num_rows')
-        plt.title('Target: {} ({}), {}th in Sequence, Question: {}'.format(label, target, sequence_number, question))
-        plt.imshow(image, interpolation='nearest', aspect='auto')
+        print(
+            f"sample_number={sample_number}",
+            f"tasks={tasks}",
+            f"questions={questions}",
+            f"targets_answer={targets_answer}",
+            f"mask_pnt={mask_pnt}",
+            f"mask_word={mask_word}",
+            f"questions_string={questions_string}",
+            f"answers_string={answers_string}",
+            sep='\n',
+        )
+
+        # Convert the images to numpy
+        images = images.cpu().detach().numpy()
+        targets_pointing = targets_pointing.cpu().detach().numpy()
+
+        fig, axs = plt.subplots(nrows=2, ncols=len(images))
+        for i, (image, target_pointing) in enumerate(zip(images, targets_pointing)):
+            # Dims (c, h, w) -> (h, w, c)
+            image = image.transpose(1, 2, 0)
+            axs[0, i].imshow(image)
+
+            # Reshape target_pointing
+            target_pointing = target_pointing.reshape((constants.GRID_SIZE, constants.GRID_SIZE))
+            axs[1, i].imshow(target_pointing)
 
         # Plot!
         plt.show()
@@ -806,7 +802,6 @@ if __name__ == "__main__":
 
     # Test parameters
     batch_size = 44
-    sequence_nr = 1
 
     # Timing test parameters
     timing_test = False
@@ -815,7 +810,7 @@ if __name__ == "__main__":
     # -------------------------
 
     # Define useful params
-    tasks = ['AndCompareColor']
+    tasks = ['ExistColorGo']
 
     # Create problem - task Go
     cog_dataset = COG(data_folder='~/data/cog', subset='val', cog_type='canonical', cog_tasks=tasks)
@@ -831,10 +826,10 @@ if __name__ == "__main__":
     batch = next(iter(dataloader))
 
     # Show sample - Task 1
-    cog_dataset.show_sample(batch, 0, sequence_nr)
+    cog_dataset.show_sample(batch, 0)
 
     # Show sample - Task 2
-    cog_dataset.show_sample(batch, 1, sequence_nr)
+    cog_dataset.show_sample(batch, 1)
 
     if timing_test:
         # Test speed of generating images vs preloading generated images.
