@@ -22,6 +22,7 @@ import json
 import os
 import string
 import tarfile
+from itertools import zip_longest
 
 import numpy as np
 import torch
@@ -544,43 +545,49 @@ class COG(Dataset):
         # Get values from JSON.
         (in_imgs, _, _, out_pnt, _, _, mask_pnt, mask_word, _) = jti.json_to_feeds([self.dataset[index]])
 
-        # Create data dictionary.
-        data_dict = dict()
-
         # Images [BATCH_SIZE x IMG_SEQ_LEN x DEPTH x HEIGHT x WIDTH].
         images = ((torch.from_numpy(in_imgs)).permute(1, 0, 4, 2, 3)).squeeze()
-        data_dict['images'] = images / 255 # Rescale RGB float from [0..255] to [0..1]
+        images = images / 255  # Rescale RGB float from [0..255] to [0..1]
 
         # Set masks used in loss/accuracy calculations.
-        data_dict['masks_pnt'] = torch.from_numpy(mask_pnt).type(torch.ByteTensor)
-        data_dict['masks_word'] = torch.from_numpy(mask_word).type(torch.ByteTensor)
+        mask_pnt = torch.from_numpy(mask_pnt).type(torch.ByteTensor)
+        mask_word = torch.from_numpy(mask_word).type(torch.ByteTensor)
 
-        data_dict['tasks'] = self.dataset[index]['family']
-        data_dict['questions'] = [self.dataset[index]['question']]
+        tasks = self.dataset[index]['family']
+        questions = [self.dataset[index]['question']]
 
-        data_dict['questions_string'] = [self.dataset[index]['question']]
-        data_dict['questions'] = torch.LongTensor(
-            [constants.INPUTVOCABULARY.index(word) for word in data_dict['questions'][0].split()]
-        )
-        if data_dict['questions'].size(0) <= self.nwords:
-            prev_size = data_dict['questions'].size(0)
-            data_dict['questions'].resize_(self.nwords)
-            data_dict['questions'][prev_size:] = 0
+        questions_string = [self.dataset[index]['question']]
+        questions = torch.LongTensor([constants.INPUTVOCABULARY.index(word) for word in questions[0].split()])
+        if questions.size(0) <= self.nwords:
+            prev_size = questions.size(0)
+            questions.resize_(self.nwords)
+            questions[prev_size:] = 0
 
         # Set targets - depending on the answers.
         answers = self.dataset[index]['answers']
-        data_dict['answers_string'] = self.dataset[index]['answers']
-        if data_dict['tasks'] in constants.CLASSIFICATION_TASKS:
-            data_dict['targets_answer'] = self.output_class_to_int(answers)
+        answers_string = self.dataset[index]['answers']
+        if tasks in constants.CLASSIFICATION_TASKS:
+            targets_answer = self.output_class_to_int(answers)
         else:
-            data_dict['targets_answer'] = torch.LongTensor([-1 for target in answers])
+            targets_answer = torch.LongTensor([-1 for target in answers])
 
         # Why are we always setting pointing targets, and answer targets only when required (-1 opposite)?
-        data_dict['targets_pointing'] = torch.FloatTensor(out_pnt)
+        targets_pointing = torch.FloatTensor(out_pnt)
 
-        return data_dict
+        return (
+            images,
+            tasks,
+            questions,
+            targets_pointing,
+            targets_answer,
+            mask_pnt,
+            mask_word,
+            questions_string,
+            answers_string,
+        )
 
-    def collate_fn(self, batch):
+    @staticmethod
+    def collate_fn(batch):
         """
         Combines a list of :py:class:`miprometheus.utils.DataDict` (retrieved with :py:func:`__getitem__`) into a batch.
 
@@ -590,28 +597,40 @@ class COG(Dataset):
         :return: ``DataDict({'images', 'tasks', 'questions', 'targets_pointing', 'targets_answer'})`` containing the batch.
 
         """
-        data_dict = dict()
+        # Transpose the list of batches of 1
+        # Using zip_longest to insert None in case of different length lists (shouldn't happen though)
+        (
+            images,
+            tasks,
+            questions,
+            targets_pointing,
+            targets_answer,
+            mask_pnt,
+            mask_word,
+            questions_string,
+            answers_string,
+        ) = map(list, zip_longest(*batch))
 
-        data_dict['images'] = torch.stack([sample['images'] for sample in batch]).type(torch.FloatTensor)
-        data_dict['tasks'] = [sample['tasks'] for sample in batch]
-        data_dict['questions'] = torch.stack([sample['questions'] for sample in batch]).type(torch.LongTensor)
+        images = torch.stack(images).type(torch.FloatTensor)
+        questions = torch.stack(questions).type(torch.LongTensor)
         # Targets.
-        data_dict['targets_pointing'] = torch.stack([sample['targets_pointing'] for sample in batch]).type(
-            torch.FloatTensor
-        )
-        data_dict['targets_answer'] = torch.stack([sample['targets_answer'] for sample in batch]).type(
-            torch.LongTensor
-        )
+        targets_pointing = torch.stack(targets_pointing).type(torch.FloatTensor)
+        targets_answer = torch.stack(targets_answer).type(torch.LongTensor)
         # Masks.
-        data_dict['masks_pnt'] = torch.stack([sample['masks_pnt'] for sample in batch]).type(torch.ByteTensor)
-        data_dict['masks_word'] = torch.stack([sample['masks_word'] for sample in batch]).type(torch.ByteTensor)
-        data_dict['vocab'] = self.output_vocab
+        mask_pnt = torch.stack(mask_pnt).type(torch.ByteTensor)
+        mask_word = torch.stack(mask_word).type(torch.ByteTensor)
 
-        # strings question and answer
-        data_dict['questions_string'] = [question['questions_string'] for question in batch]
-        data_dict['answers_string'] = [answer['answers_string'] for answer in batch]
-
-        return data_dict
+        return (
+            images,
+            tasks,
+            questions,
+            targets_pointing,
+            targets_answer,
+            mask_pnt,
+            mask_word,
+            questions_string,
+            answers_string,
+        )
 
     def source_dataset(self):
         """
@@ -685,7 +704,7 @@ class COG(Dataset):
             stat_col[key] = families_accuracies_dic[key][2]
 
     @staticmethod
-    def show_sample(data_dict, sample_number=0, sequence_number=0):
+    def show_sample(batch, sample_number=0, sequence_number=0):
         """
         Shows a sample from the batch.
 
@@ -702,10 +721,19 @@ class COG(Dataset):
         import matplotlib.pyplot as plt
 
         # Unpack dict.
-        images = data_dict['images']
-        targets = data_dict['targets']
-        labels = data_dict['targets_label']
-        questions = data_dict['questions']
+        (
+            images,
+            tasks,
+            questions,
+            targets_pointing,
+            targets_answer,
+            mask_pnt,
+            mask_word,
+            questions_string,
+            answers_string,
+        ) = batch
+        targets = targets_pointing
+        labels = targets_answer
 
         # Get sample.
         images = images[sample_number].cpu().detach().numpy()
@@ -802,11 +830,6 @@ if __name__ == "__main__":
     # Display single sample (0) from batch.
     batch = next(iter(dataloader))
 
-    # VQA expects 'targets', so change 'targets_answer' to 'targets'
-    # Implement a data_dict.pop later.
-    batch['targets'] = batch['targets_pointing']
-    batch['targets_label'] = batch['targets_answer']
-
     # Show sample - Task 1
     cog_dataset.show_sample(batch, 0, sequence_nr)
 
@@ -849,9 +872,20 @@ if __name__ == "__main__":
             if i == testbatches:
                 print(f'Finished saving {testbatches} batches')
                 break
+            (
+                images,
+                tasks,
+                questions,
+                targets_pointing,
+                targets_answer,
+                mask_pnt,
+                mask_word,
+                questions_string,
+                answers_string,
+            ) = batch
             if not os.path.exists(os.path.expanduser('~/data/cogtest')):
                 os.makedirs(os.path.expanduser('~/data/cogtest'))
-            np.save(os.path.expanduser('~/data/cogtest/' + str(i)), batch['images'])
+            np.save(os.path.expanduser('~/data/cogtest/' + str(i)), images)
 
         preload = time.time()
         for i in range(testbatches):
