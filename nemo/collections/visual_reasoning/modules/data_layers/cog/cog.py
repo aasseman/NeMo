@@ -20,7 +20,6 @@ __author__ = "Emre Sevgen, Tomasz Kornuta"
 import gzip
 import json
 import os
-import string
 import tarfile
 from itertools import zip_longest
 
@@ -32,10 +31,14 @@ from torch.utils.data import Dataset
 
 from .cog_utils import constants, generate_dataset
 from .cog_utils import json_to_img as jti
+from nemo.backends.pytorch import DataLayerNM
+from nemo.core import DeviceType, NeuralModuleFactory
+from nemo.core.neural_types import CategoricalValuesType, ChannelType, MaskType, NeuralType, VoidType
 from nemo.utils import logging
+from nemo.utils.decorators import add_port_docs
 
 
-class COG(Dataset):
+class COGDataLayer(DataLayerNM, Dataset):
     """
     The COG dataset is a sequential VQA dataset.
 
@@ -119,7 +122,7 @@ class COG(Dataset):
         """
 
         # Call base class constructors
-        super(COG, self).__init__()
+        super(COGDataLayer, self).__init__()
 
         # Data folder main is /path/cog
         # Data folder parent is data_X_Y_Z
@@ -186,34 +189,11 @@ class COG(Dataset):
 
         self.output_classes_pointing = 49
 
-        # Set default values
-        self.default_values = {
-            'height': self.img_size,
-            'width': self.img_size,
-            'num_channels': 3,
-            'sequence_length': self.sequence_length,
-            'nb_classes': self.output_classes,
-            'nb_classes_pointing': self.output_classes_pointing,
-            'embed_vocab_size': self.input_words,
-        }
-
-        # Set data dictionary based on parsed dataset type
-        self.data_definitions = {
-            'images': {'size': [-1, self.sequence_length, 3, self.img_size, self.img_size], 'type': [torch.Tensor]},
-            'tasks': {'size': [-1, 1], 'type': [list, str]},
-            'questions': {'size': [-1, self.nwords], 'type': [torch.Tensor]},
-            #'targets': {'size': [-1,self.sequence_length, self.output_classes], 'type': [torch.Tensor]},
-            'targets_pointing': {'size': [-1, self.sequence_length, 2], 'type': [torch.Tensor]},
-            'targets_answer': {'size': [-1, self.sequence_length, self.output_classes], 'type': [list, str]},
-            'masks_pnt': {'size': [-1, self.sequence_length], 'type': [torch.Tensor]},
-            'masks_word': {'size': [-1, self.sequence_length], 'type': [torch.Tensor]},
-        }
-
         # Check if dataset exists, download or generate if necessary.
         self.source_dataset()
 
         # Load all the .jsons, but image generation is done in __getitem__
-        self.dataset = []
+        self._dataset = []
 
         logging.info("Loading dataset as json into memory.")
         # Val and Test are not shuffled
@@ -223,7 +203,7 @@ class COG(Dataset):
                     with gzip.open(os.path.join(self.data_folder_child, tasklist)) as f:
                         fulltask = f.read().decode('utf-8').split('\n')
                         for datapoint in fulltask:
-                            self.dataset.append(json.loads(datapoint))
+                            self._dataset.append(json.loads(datapoint))
                     logging.info("{} task examples loaded.".format(tasklist[4:-8]))
                 else:
                     logging.info("Skipped loading {} task.".format(tasklist[4:-8]))
@@ -236,19 +216,45 @@ class COG(Dataset):
                     for datapoint in fullzip:
                         task = json.loads(datapoint)
                         if task['family'] in self.tasks:
-                            self.dataset.append(task)
+                            self._dataset.append(task)
                 logging.info("Zip file {} loaded.".format(zipfile))
 
-        self.length = len(self.dataset)
+        self.length = len(self._dataset)
+
+    @add_port_docs
+    @property
+    def output_ports(self):
+        """
+        Creates definitions of output ports.
+        """
+        return {
+            "images": NeuralType(('B', 'T', 'C', 'H', 'W'), elements_type=ChannelType),
+            "tasks": NeuralType(('B'), elements_type=VoidType),
+            "questions": NeuralType(('B', 'A'), elements_type=CategoricalValuesType),
+            "targets_pointing": NeuralType(('B', 'T', 'A'), elements_type=CategoricalValuesType),
+            "targets_answer": NeuralType(('B', 'T'), elements_type=CategoricalValuesType),
+            "mask_pointing": NeuralType(('B', 'T'), elements_type=MaskType),
+            "mask_word": NeuralType(('B', 'T'), elements_type=MaskType),
+            "questions_string": NeuralType(('B'), elements_type=VoidType),
+            "answers_string": NeuralType(('B', 'T'), elements_type=VoidType),
+        }
+
+    def __len__(self):
+        return self.length
+
+    @property
+    def dataset(self):
+        return self
+
+    @property
+    def data_iterator(self):
+        return None
 
     def output_class_to_int(self, targets_answer):
         # for j, target in enumerate(targets_answer):
         targets_answer = [-1 if a == 'invalid' else self.output_vocab.index(a) for a in targets_answer]
         targets_answer = torch.LongTensor(targets_answer)
         return targets_answer
-
-    def __len__(self):
-        return self.length
 
     def __getitem__(self, index):
         """
@@ -278,7 +284,7 @@ class COG(Dataset):
         # mask_word: (n_epoch*batch_size)
 
         # Get values from JSON.
-        (in_imgs, _, _, out_pnt, _, _, mask_pnt, mask_word, _) = jti.json_to_feeds([self.dataset[index]])
+        (in_imgs, _, _, out_pnt, _, _, mask_pnt, mask_word, _) = jti.json_to_feeds([self._dataset[index]])
 
         # Images [BATCH_SIZE x IMG_SEQ_LEN x DEPTH x HEIGHT x WIDTH].
         images = ((torch.from_numpy(in_imgs)).permute(1, 0, 4, 2, 3)).squeeze()
@@ -288,10 +294,10 @@ class COG(Dataset):
         mask_pnt = torch.from_numpy(mask_pnt).type(torch.ByteTensor)
         mask_word = torch.from_numpy(mask_word).type(torch.ByteTensor)
 
-        tasks = self.dataset[index]['family']
-        questions = [self.dataset[index]['question']]
+        tasks = self._dataset[index]['family']
+        questions = [self._dataset[index]['question']]
 
-        questions_string = [self.dataset[index]['question']]
+        questions_string = [self._dataset[index]['question']]
         questions = torch.LongTensor([constants.INPUTVOCABULARY.index(word) for word in questions[0].split()])
         if questions.size(0) <= self.nwords:
             prev_size = questions.size(0)
@@ -299,8 +305,8 @@ class COG(Dataset):
             questions[prev_size:] = 0
 
         # Set targets - depending on the answers.
-        answers = self.dataset[index]['answers']
-        answers_string = self.dataset[index]['answers']
+        answers = self._dataset[index]['answers']
+        answers_string = self._dataset[index]['answers']
         if tasks in constants.CLASSIFICATION_TASKS:
             targets_answer = self.output_class_to_int(answers)
         else:
@@ -502,6 +508,8 @@ if __name__ == "__main__":
     Checks one regression and one classification task.
     """
 
+    neural_factory = NeuralModuleFactory(log_dir='logs', create_tb_writer=False, placement=DeviceType.CPU)
+
     # Test parameters
     batch_size = 44
 
@@ -515,7 +523,7 @@ if __name__ == "__main__":
     tasks = ['ExistColorGo']
 
     # Create problem - task Go
-    cog_dataset = COG(data_folder='~/data/cog', subset='val', cog_type='canonical', cog_tasks=tasks)
+    cog_dataset = COGDataLayer(data_folder='~/data/cog', subset='val', cog_type='canonical', cog_tasks=tasks)
 
     # Set up Dataloader iterator
     from torch.utils.data import DataLoader
@@ -539,7 +547,9 @@ if __name__ == "__main__":
 
         # Define params to load entire dataset - all tasks included
         preload = time.time()
-        full_cog_canonical = COG(data_folder='~/data/cog/', subset='val', cog_type='canonical', cog_tasks='all')
+        full_cog_canonical = COGDataLayer(
+            data_folder='~/data/cog/', subset='val', cog_type='canonical', cog_tasks='all'
+        )
         postload = time.time()
 
         dataloader = DataLoader(
