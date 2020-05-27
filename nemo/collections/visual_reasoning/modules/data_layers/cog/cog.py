@@ -241,62 +241,8 @@ class COG(Dataset):
 
         self.length = len(self.dataset)
 
-        self.tuple_list = [[0, 0, 0] for _ in range(len(constants.CATEGORIES))]
-
-    def evaluate_loss(self, data_dict, logits):
-        """
-        Calculates accuracy equal to mean number of correct predictions in a given batch.
-        The function calculates two separate losses for answering and pointing actions and sums them up.
-
-
-        :param data_dict: DataDict({'targets_pointing', 'targets_answer', ...}).
-
-        :param logits: Predictions being output of the model, consisting of a tuple (logits_answer, logits_pointing).
-        """
-        # Get targets.
-        targets_answer = data_dict['targets_answer']
-        targets_pointing = data_dict['targets_pointing']
-
-        # Get predictions.
-        preds_answer = logits[0]
-        preds_pointing = logits[1]
-
-        # Get sizes.
-        batch_size = logits[0].size(0)
-        img_seq_len = logits[0].size(1)
-
-        # Retrieve "pointing" masks, both of size [BATCH_SIZE x IMG_SEQ_LEN] and transform it into floats.
-        mask_pointing = data_dict['masks_pnt'].type(torch.FloatTensor)
-
-        # Classification loss.
-        # Reshape predictions [BATCH_SIZE * IMG_SEQ_LEN x CLASSES]
-        preds_answer = preds_answer.view(batch_size * img_seq_len, -1)
-        # Reshape targets [BATCH_SIZE * IMG_SEQ_LEN]
-        targets_answer = targets_answer.view(batch_size * img_seq_len)
-        # Calculate loss.
-        # Ignore_index: specifies a target VALUE that is ignored and does not contribute to the input gradient.
-        # -1 is set when we do not use that action.
-        ce_loss_fn = nn.CrossEntropyLoss(ignore_index=-1)
-        self.loss_answer = ce_loss_fn(preds_answer, targets_answer)
-
-        # Pointing loss.
-        # We will softmax over the third dimension of [BATCH_SIZE x IMG_SEQ_LEN x NUM_POINT_ACTIONS].
-        logsoftmax_fn = nn.LogSoftmax(dim=2)
-        # Calculate cross entropy [BATCH_SIZE x IMG_SEQ_LEN].
-        ce_point = torch.sum((-targets_pointing * logsoftmax_fn(preds_pointing)), dim=2) * mask_pointing
-        # print("mask_pointing =", mask_pointing)
-        # print("ce_point = ", ce_point)
-
-        # Calculate mean - manually, skipping all non-pointing elements of the targets.
-        if mask_pointing.sum().item() != 0:
-            self.loss_pointing = torch.sum(ce_point) / mask_pointing.sum()
-        else:
-            self.loss_pointing = torch.tensor(0).type(torch.FloatTensor)
-
-        # Both losses are averaged over batch size and sequence lengts - so we can simply sum them.
-        return self.loss_answer + self.loss_pointing
-
-    def calculate_accuracy(self, data_dict, logits):
+    @staticmethod
+    def calculate_accuracy(data_dict, logits):
         """ Calculates accuracy equal to mean number of correct predictions in a given batch.
         WARNING: Applies mask to both logits and targets!
 
@@ -391,7 +337,8 @@ class COG(Dataset):
         # Return all three of them.
         return acc_total, acc_answer, acc_pointing
 
-    def get_acc_per_family(self, data_dict, logits):
+    @staticmethod
+    def get_acc_per_family(data_dict, logits):
         """
         Compute the accuracy per family for the current batch. Also accumulates
         the number of correct predictions & questions per family in self.correct_pred_families (saved
@@ -417,7 +364,8 @@ class COG(Dataset):
         targets_pointing = data_dict['targets_pointing']
 
         # build dictionary to store acc families stats
-        categories_stats = dict(zip(constants.CATEGORIES, self.tuple_list))
+        tuple_list = [[0, 0, 0] for _ in range(len(constants.CATEGORIES))]
+        categories_stats = dict(zip(constants.CATEGORIES, tuple_list))
 
         # Get tasks
         tasks = data_dict['tasks']
@@ -680,7 +628,8 @@ class COG(Dataset):
         for stat in ['loss_answer', 'loss_pointing', 'acc', 'acc_answer', 'acc_pointing'] + constants.CATEGORIES:
             stat_col.add_statistic(stat, '{:12.10f}')
 
-    def collect_statistics(self, stat_col, data_dict, logits):
+    @staticmethod
+    def collect_statistics(stat_col, data_dict, logits, loss_answer, loss_pointing):
         """
         Collects dataset details.
         :param stat_col: :py:class:`miprometheus.utils.StatisticsCollector`.
@@ -688,17 +637,17 @@ class COG(Dataset):
         :param logits: Prediction of the model (:py:class:`torch.Tensor`)
         """
         # Additional loss.
-        stat_col['loss_answer'] = self.loss_answer.cpu().item()
-        stat_col['loss_pointing'] = self.loss_pointing.cpu().item()
+        stat_col['loss_answer'] = loss_answer.cpu().item()
+        stat_col['loss_pointing'] = loss_pointing.cpu().item()
 
         # Accuracies.
-        acc_total, acc_answer, acc_pointing = self.calculate_accuracy(data_dict, logits)
+        acc_total, acc_answer, acc_pointing = COG.calculate_accuracy(data_dict, logits)
         stat_col['acc'] = acc_total
         stat_col['acc_answer'] = acc_answer
         stat_col['acc_pointing'] = acc_pointing
 
         # Families Accuracies
-        families_accuracies_dic = self.get_acc_per_family(data_dict, logits)
+        families_accuracies_dic = COG.get_acc_per_family(data_dict, logits)
 
         for key in families_accuracies_dic:
             stat_col[key] = families_accuracies_dic[key][2]
