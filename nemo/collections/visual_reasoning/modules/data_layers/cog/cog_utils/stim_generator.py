@@ -134,7 +134,7 @@ def _get_space_to(x0, x1, y0, y1, space_type):
     elif space_type == 'bottom':
         space = [(0.05, 0.95), (y1, 0.95)]
     else:
-        raise ValueError('Unknown space type: ' + str(space_type))
+        raise ValueError(f'Unknown space type: {space_type}')
 
     return Space(space)
 
@@ -308,7 +308,7 @@ class Object(object):
                 elif isinstance(a, Space):
                     self.space = a
                 else:
-                    raise TypeError('Unknown type for attribute: ' + str(a) + ' ' + str(type(a)))
+                    raise TypeError(f'Unknown type for attribute: {a} {type(a)}')
 
         self.when = when
         self.epoch = None
@@ -479,7 +479,7 @@ class ObjectSet(object):
             epoch = random.randint(epoch_range_left, epoch_range_right)
             obj.epoch = [epoch, epoch + 1]
         else:
-            raise NotImplementedError('When value: {:s} is not implemented'.format(str(obj.when)))
+            raise NotImplementedError(f'When value: {obj.when} is not implemented')
 
         # Insert and maintain order
         i = bisect_left(self.end_epoch, obj.epoch[1])
@@ -561,10 +561,11 @@ class ObjectSet(object):
         shape = shape or Shape(None)
 
         if not isinstance(color, Color):
-            raise TypeError('color has to be Color class, is instead of class ' + str(type(color)))
+            raise TypeError(f'color has to be Color class, is instead of class {type(color)}')
         if not isinstance(shape, Shape):
-            raise TypeError('shape has to be Shape class, is instead of class ' + str(type(shape)))
-        assert isinstance(space, Space)
+            raise TypeError(f'shape has to be Shape class, is instead of class {type(shape)}')
+        if not isinstance(space, Space):
+            raise TypeError()
 
         if when == 'now':
             # Use the fast implementation
@@ -678,7 +679,7 @@ def render_static_obj(canvas, obj, img_size):
         draw.fontmode = '1'
         draw.text((center[0] - 3, center[1] - 10), shape, color, font=font)
     else:
-        raise NotImplementedError('Unknown shape ' + str(shape))
+        raise NotImplementedError(f'Unknown shape {shape}')
 
     canvas[:] = np.array(np.float32(image))
 
@@ -739,7 +740,8 @@ def render_static(objlists, img_size=224):
             for obj in epoch_objs:
                 render_static_obj(canvas, obj, img_size)
             i_frame += 1
-    assert i_frame == len(objlists) * n_epoch_max, '%d != %d' % (i_frame, len(objlists) * n_epoch_max)
+    if i_frame != len(objlists) * n_epoch_max:
+        raise AssertionError(f'{i_frame} != {len(objlists) * n_epoch_max}')
 
     return movie
 
@@ -840,7 +842,7 @@ def random_attr(attr_type):
     elif attr_type == 'loc':
         return Loc([round(random.uniform(0.05, 0.95), 3), round(random.uniform(0.05, 0.95), 3)])
     else:
-        raise NotImplementedError('Unknown attr_type :' + str(attr_type))
+        raise NotImplementedError(f'Unknown attr_type : {attr_type}')
 
 
 def random_space():
@@ -956,7 +958,7 @@ def another_attr(attr):
     elif attr == const.INVALID:
         return attr
     else:
-        raise TypeError('Type {:s} of {:s} is not supported'.format(str(attr), str(type(attr))))
+        raise TypeError(f'Type {attr} of {type(attr)} is not supported')
 
 
 def another_colorshape(color_shape):

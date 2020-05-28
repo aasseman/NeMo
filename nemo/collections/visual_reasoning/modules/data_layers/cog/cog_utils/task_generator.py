@@ -83,7 +83,7 @@ class Task(object):
             self._operator = Operator()
         else:
             if not isinstance(operator, Operator):
-                raise TypeError('operator is the wrong type ' + str(type(operator)))
+                raise TypeError(f'operator is the wrong type {type(operator)}')
             self._operator = operator
 
     def __call__(self, objset, epoch_now):
@@ -183,7 +183,8 @@ class Task(object):
                     if isinstance(c, Select):
                         # Loop over new output
                         for o in output:
-                            assert isinstance(o, sg.Object)
+                            if not isinstance(o, sg.Object):
+                                raise TypeError()
                             merged = False
                             # Loop over previously assigned outputs
                             for s in should_be_dict[c]:
@@ -278,7 +279,8 @@ class Select(Operator):
         shape = shape or sg.Shape(None)
 
         if isinstance(loc, Operator) or loc.has_value:
-            assert space_type is not None
+            if space_type is None:
+                raise ValueError()
 
         self.loc, self.color, self.shape = loc, color, shape
         self.set_child([loc, color, shape])
@@ -369,7 +371,7 @@ class Select(Operator):
             # Making sure should_be is a length-1 list of Object instance
             for s in should_be:
                 if not isinstance(s, sg.Object):
-                    raise TypeError('Wrong type for items in should_be: ' + str(type(s)))
+                    raise TypeError(f'Wrong type for items in should_be: {type(s)}')
 
             if len(should_be) > 1:
                 for s in should_be:
@@ -485,7 +487,8 @@ class Get(Operator):
         super(Get, self).__init__()
         self.attr_type = attr_type
         self.objs = objs
-        assert isinstance(objs, Operator)
+        if not isinstance(objs, Operator):
+            raise TypeError()
         self.set_child(objs)
 
     def __str__(self):
@@ -577,7 +580,8 @@ class GetTime(Operator):
         super(GetTime, self).__init__()
         self.attr_type = 'time'
         self.objs = objs
-        assert isinstance(objs, Operator)
+        if not isinstance(objs, Operator):
+            raise TypeError()
         self.set_child(objs)
 
     def __str__(self):
@@ -626,7 +630,8 @@ class Exist(Operator):
     def __init__(self, objs):
         super(Exist, self).__init__()
         self.objs = objs
-        assert isinstance(objs, Operator)
+        if not isinstance(objs, Operator):
+            raise TypeError()
         self.set_child(objs)
 
     def __str__(self):
@@ -690,7 +695,8 @@ class Switch(Operator):
         self.both_options_avail = both_options_avail
 
     def __str__(self):
-        assert not self.parent
+        if self.parent:
+            raise AssertionError()
         words = ['if', str(self.statement), ',', 'then', str(self.do_if_true), ',', 'else', str(self.do_if_false)]
         if not self.parent:
             words += ['.']
@@ -781,7 +787,8 @@ class IsSame(Operator):
             raise ValueError('attr1 and attr2 can not both be Attribute instances.')
 
         self.attr_type = self.attr1.attr_type
-        assert self.attr_type == self.attr2.attr_type
+        if self.attr_type != self.attr2.attr_type:
+            raise AssertionError()
 
     def __str__(self):
         words = [self.attr1.__str__(), 'equal', self.attr2.__str__()]
@@ -810,7 +817,8 @@ class IsSame(Operator):
         attr2_fixed = attr2_value != const.INVALID
 
         if attr1_fixed:
-            assert attr1_value.has_value
+            if not attr1_value.has_value:
+                raise AssertionError()
 
         if attr1_fixed and attr2_fixed:
             # do nothing

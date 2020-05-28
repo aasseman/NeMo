@@ -40,6 +40,7 @@ from nemo.utils.decorators import add_port_docs
 
 class COGDataLayer(DataLayerNM, Dataset):
     """
+    Inherits :class:`nemo.backends.pytorch.DataLayerNM` and :class:`torch.utils.data.Dataset`.
     The COG dataset is a sequential VQA dataset.
 
     Inputs are a sequence of images of simple shapes and characters on a black background, \
@@ -52,73 +53,49 @@ class COGDataLayer(DataLayerNM, Dataset):
 
     def __init__(
         self,
-        data_folder: str = "~/data/cog",
-        subset: str = "train",
-        cog_tasks: str = "class",
-        cog_type: str = "canonical",
+        data_folder: str = '~/data/cog',
+        subset: str = 'train',
+        cog_tasks: str = 'class',
+        cog_type: str = 'canonical',
         cog_gen_examples_per_task=None,
         cog_gen_sequence_length=None,
         cog_gen_memory_length=None,
         cog_gen_max_distractors=None,
-        cog_gen_threads=None,
+        cog_gen_threads=1,
     ):
         """
-        Initializes the :py:class:`COG` problem:
+        Initializes :class:`COGDataLayer`.
 
-            - Calls :py:class:`miprometheus.problems.VQAProblem` class constructor,
-            - Sets the following attributes using the provided ``params``:
-
-                - ``self.data_folder`` (`string`) : Data directory where the dataset is stored.
-                - ``self.set`` (`string`) : 'val', 'test', or 'train'
-                - ``self.tasks`` (`string` or list of `string`) : Which tasks to use. 'class', 'reg', \
-                'all', 'binary', or a list of tasks such as ['AndCompareColor', 'AndCompareShape']. \
-                Only the selected tasks will be used.
-
-                Classification tasks are: ['AndCompareColor', 'AndCompareShape', 'AndSimpleCompareColor',
-                'AndSimpleCompareShape', 'CompareColor', 'CompareShape', 'Exist',
-                'ExistColor', 'ExistColorOf', 'ExistColorSpace', 'ExistLastColorSameShape',
-                'ExistLastObjectSameObject', 'ExistLastShapeSameColor', 'ExistShape',
-                'ExistShapeOf', 'ExistShapeSpace', 'ExistSpace', 'GetColor', 'GetColorSpace',
-                'GetShape', 'GetShapeSpace', 'SimpleCompareColor', 'SimpleCompareShape']		
-
-                Regression tasks are: 		self.regression_tasks = ['AndSimpleExistColorGo', 'AndSimpleExistGo', 'AndSimpleExistShapeGo', 'CompareColorGo',
-                'CompareShapeGo', 'ExistColorGo', 'ExistColorSpaceGo', 'ExistGo', 'ExistShapeGo',
-                'ExistShapeSpaceGo', 'ExistSpaceGo', 'Go', 'GoColor', 'GoColorOf', 'GoShape',
-                'GoShapeOf', 'SimpleCompareColorGo', 'SimpleCompareShapeGo', 'SimpleExistColorGo',
-                'SimpleExistGo','SimpleExistShapeGo']
-
-                Binary classification tasks are: ['AndCompareColor', 'AndCompareShape', 'AndSimpleCompareColor', 'AndSimpleCompareShape', 'CompareColor', 'CompareShape', 'Exist', 
-                'ExistColor', 'ExistColorOf', 'ExistColorSpace', 'ExistLastColorSameShape', 'ExistLastObjectSameObject', 'ExistLastShapeSameColor', 
-                'ExistShape', 'ExistShapeOf', 'ExistShapeSpace', 'ExistSpace', 'SimpleCompareColor', 'SimpleCompareShape'] 
-
-
-                - ``self.dataset_type`` (`string`) : Which dataset to use, 'canonical', 'hard', or \
-                'generated'. If 'generated', please specify 'examples_per_task', 'sequence_length', \
-                'memory_length', and 'max_distractors' under 'generation'. Can also specify 'nr_processors' for generation.
-
-            - Adds the following as default params:
-
-                >>> {'data_folder': os.path.expanduser('~/data/cog'),
-                >>>  'set': 'train',
-                >>>  'tasks': 'class',
-                >>>  'dataset_type': 'canonical',
-                >>>  'initialization_only': False}
-
-            - Sets:
-
-                >>> self.data_definitions = {'images': {'size': [-1, self.sequence_length, 3, self.img_size, self.img_size], 'type': [torch.Tensor]},
-                >>>                          'tasks': {'size': [-1, 1], 'type': [list, str]},
-                >>>                          'questions': {'size': [-1, 1], 'type': [list, str]},
-                >>>                          'targets_pointing': {'size': [-1, self.sequence_length, 2], 'type': [torch.Tensor]},
-                >>>                          'targets_answer': {'size': [-1, self.sequence_length, 1], 'type' : [list,str]}
-                >>>                         }
-
-
-
-        :param params: Dictionary of parameters (read from configuration ``.yaml`` file).
-        :type params: :py:class:`miprometheus.utils.ParamInterface`
-
-
+        :param data_folder: Folder to save to / load from the COG dataset. Defaults to ``"~/data/cog"``.
+        :type data_folder: str, optional
+        :param subset: Select which of training, validation, or test split to load. Has to be one of ``"train"``, ``"val"`` or ``"test"``.
+            Defaults to ``"train"``.
+        :type subset: str, optional
+        :param cog_tasks: Select which COG tasks to load. Has to be one of ``'class'``, ``'reg'``, ``'all'``,
+            ``'binary'``, or a fine-grained list of tasks. The complete list of COG tasks is in 
+            :mod:`nemo.collections.visual_reasoning.modules.data_layers.cog.cog_utils.constants`'s `CATEGORIES`.
+            Defaults to ``'class'``.
+        :type cog_tasks: str or list(str), optional
+        :param cog_type: Type of COG dataset. One of ``'canonical'``, ``'hard'`` or ``'generated'``.
+            If ``'generated'``, the COG dataset will be generated programmatically using the settings given in the next arguments, ie.
+            `cog_gen_examples_per_task`, `cog_gen_sequence_length`, `cog_gen_memory_length`, `cog_gen_max_distractors`, `cog_gen_threads`.
+            Defaults to ``'canonical'``.
+        :type cog_type: str, optional
+        :param cog_gen_examples_per_task: Setting for the COG generator. Number of samples to generate per task,
+            Defaults to None.
+        :type cog_gen_examples_per_task: int or None, optional
+        :param cog_gen_sequence_length: Setting for the COG generator. Number of frames in each sample.
+            Defaults to None.
+        :type cog_gen_sequence_length: int or None, optional
+        :param cog_gen_memory_length: Setting for the COG generator. Memory span, in number of frames.
+            Defaults to None.
+        :type cog_gen_memory_length: int or None, optional
+        :param cog_gen_max_distractors: Setting for the COG generator. Number of distractor objects,
+            Defaults to None.
+        :type cog_gen_max_distractors: int or None, optional
+        :param cog_gen_threads: Setting for the COG generator. Number of CPU threads to use during dataset generation.
+            Defaults to 1.
+        :type cog_gen_threads: int, optional
         """
 
         # Call base class constructors
@@ -130,16 +107,19 @@ class COGDataLayer(DataLayerNM, Dataset):
         self.data_folder_main = os.path.expanduser(data_folder)
 
         self.set = subset
-        assert self.set in [
+        if self.set not in [
             'val',
             'test',
             'train',
-        ], f"subset must be one of 'val', 'test', or 'train', got {self.set}"
+        ]:
+            raise ValueError(f"subset must be one of 'val', 'test', or 'train', got {self.set}")
+
         self.dataset_type = cog_type
-        assert self.dataset_type in ['canonical', 'hard', 'generated'], (
-            "dataset in configuration file must be one of "
-            f"'canonical', 'hard', or 'generated', got {self.dataset_type}"
-        )
+        if self.dataset_type not in ['canonical', 'hard', 'generated']:
+            raise ValueError(
+                "dataset in configuration file must be one of "
+                f"'canonical', 'hard', or 'generated', got {self.dataset_type}"
+            )
 
         # Default output vocab
         self.output_vocab = constants.OUTPUTVOCABULARY
@@ -204,9 +184,9 @@ class COGDataLayer(DataLayerNM, Dataset):
                         fulltask = f.read().decode('utf-8').split('\n')
                         for datapoint in fulltask:
                             self._dataset.append(json.loads(datapoint))
-                    logging.info("{} task examples loaded.".format(tasklist[4:-8]))
+                    logging.info(f"{tasklist[4:-8]} task examples loaded.")
                 else:
-                    logging.info("Skipped loading {} task.".format(tasklist[4:-8]))
+                    logging.info(f"Skipped loading {tasklist[4:-8]} task.")
 
         # Training set is shuffled
         elif self.set == 'train':
@@ -217,7 +197,7 @@ class COGDataLayer(DataLayerNM, Dataset):
                         task = json.loads(datapoint)
                         if task['family'] in self.tasks:
                             self._dataset.append(task)
-                logging.info("Zip file {} loaded.".format(zipfile))
+                logging.info(f"Zip file {zipfile} loaded.")
 
         self.length = len(self._dataset)
 
@@ -257,31 +237,13 @@ class COGDataLayer(DataLayerNM, Dataset):
         return targets_answer
 
     def __getitem__(self, index):
-        """
-        Getter method to access the dataset and return a sample.
+        """Getter method to access the dataset and return a sample.
 
         :param index: index of the sample to return.
         :type index: int
-
-        :return: ``DataDict({'images', 'questions', 'targets', 'targets_label'})``, with:
-        
-            - ``images``: Sequence of images,
-            - ``tasks``: Which task family sample belongs to,
-            - ``questions``: Question on the sequence (this is constant per sequence for COG),
-            - ``targets_pointing``: Sequence of targets as tuple of floats for pointing tasks,
-            - ``targets_answer``: Sequence of word targets for classification tasks.
-
+        :return: as defined in `output_ports`.
+        :rtype: tuple
         """
-        # This returns:
-        # All variables are numpy array of float32
-        # in_imgs: (n_epoch*batch_size, img_size, img_size, 3)
-        # in_rule: (max_seq_length, batch_size) the rule language input, type int32
-        # seq_length: (batch_size,) the length of each task instruction
-        # out_pnt: (n_epoch*batch_size, n_out_pnt)
-        # out_pnt_xy: (n_epoch*batch_size, -2)
-        # out_word: (n_epoch*batch_size, n_out_word)
-        # mask_pnt: (n_epoch*batch_size)
-        # mask_word: (n_epoch*batch_size)
 
         # Get values from JSON.
         (in_imgs, _, _, out_pnt, _, _, mask_pnt, mask_word, _) = jti.json_to_feeds([self._dataset[index]])
@@ -329,15 +291,14 @@ class COGDataLayer(DataLayerNM, Dataset):
 
     @staticmethod
     def collate_fn(batch):
+        """Collate separate samples from `__getitem__` into a batch. Effectively doing a transpose of the input data.
+
+        :param batch: List of samples.
+        :type batch: list(tuple)
+        :return: Tuple of Batches (one per output port)
+        :rtype: tuple
         """
-        Combines a list of :py:class:`miprometheus.utils.DataDict` (retrieved with :py:func:`__getitem__`) into a batch.
 
-        :param batch: individual :py:class:`miprometheus.utils.DataDict` samples to combine.
-        :type batch: list
-
-        :return: ``DataDict({'images', 'tasks', 'questions', 'targets_pointing', 'targets_answer'})`` containing the batch.
-
-        """
         # Transpose the list of batches of 1
         # Using zip_longest to insert None in case of different length lists (shouldn't happen though)
         (
@@ -374,10 +335,8 @@ class COGDataLayer(DataLayerNM, Dataset):
         )
 
     def source_dataset(self):
-        """
-        Handles downloading and unzipping the canonical or hard version of the dataset.
+        """Handles downloading and unzipping the canonical or hard version of the dataset."""
 
-        """
         self.download = False
         if self.dataset_type == 'generated':
             self.download = self.check_and_download(self.data_folder_child)
@@ -413,14 +372,12 @@ class COGDataLayer(DataLayerNM, Dataset):
 
     @staticmethod
     def show_sample(batch, sample_number=0):
-        """
-        Shows a sample from the batch.
+        """Shows a sample from the batch. Mainly for testing purposes.
+        If a display is present, will plot the visuals with :mod:`matplotlib`.
 
-        :param data_dict: ``DataDict`` containing inputs and targets.
-        :type data_dict: :py:class:`miprometheus.utils.DataDict`
-
-        :param sample_number: Number of sample in batch (default: 0)
-        :type sample_number: int
+        :param batch: Batch from a :class:`torch.utils.data.Dataloader` operating on an instance of :class:`COGDataLayer`.
+        :param sample_number: Index of sample to show from the batch, defaults to 0
+        :type sample_number: int, optional
         """
 
         import matplotlib.pyplot as plt
@@ -491,13 +448,13 @@ class COGDataLayer(DataLayerNM, Dataset):
         file_folder_to_check = os.path.expanduser(file_folder_to_check)
         if not (os.path.isfile(file_folder_to_check) or os.path.isdir(file_folder_to_check)):
             if url is not None:
-                logging.info('Downloading {}'.format(url))
+                logging.info(f'Downloading {url}')
                 wget.download(url, os.path.expanduser(download_name))
                 return True
             else:
                 return True
         else:
-            logging.info('Dataset found at {}'.format(file_folder_to_check))
+            logging.info(f'Dataset found at {file_folder_to_check}')
             return False
 
 

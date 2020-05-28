@@ -122,7 +122,7 @@ class GoColorOf(Task):
                 the minimum epoch number for this task
         """
         if n_epoch < 4:
-            raise ValueError('Number of epoch {:d} is less than 4'.format(n_epoch))
+            raise ValueError(f'Number of epoch {n_epoch} is less than 4')
         color1, color2 = sg.sample_color(2)
         color3 = sg.random_color()
 
@@ -158,7 +158,7 @@ class GoShapeOf(Task):
     def generate_objset(self, n_epoch, n_distractor=1, average_memory_span=2):
         """Generate object set."""
         if n_epoch < 4:
-            raise ValueError('Number of epoch {:d} is less than 4'.format(n_epoch))
+            raise ValueError(f'Number of epoch {n_epoch} is less than 4')
         shape1, shape2 = sg.sample_shape(2)
         shape3 = sg.random_shape()
 
@@ -723,7 +723,7 @@ class ExistLastShapeSameColor(Task):
 
     def generate_objset(self, n_epoch, n_distractor=1, average_memory_span=2):
         if n_epoch < 4:
-            raise ValueError('Number of epoch {:d} is less than 4'.format(n_epoch))
+            raise ValueError(f'Number of epoch {n_epoch} is less than 4')
         objset = sg.ObjectSet(n_epoch=n_epoch)
 
         n_sample = 2
@@ -760,7 +760,7 @@ class ExistLastColorSameShape(Task):
 
     def generate_objset(self, n_epoch, n_distractor=1, average_memory_span=2):
         if n_epoch < 4:
-            raise ValueError('Number of epoch {:d} is less than 4'.format(n_epoch))
+            raise ValueError(f'Number of epoch {n_epoch} is less than 4')
         objset = sg.ObjectSet(n_epoch=n_epoch)
 
         n_sample = 2
@@ -803,7 +803,7 @@ class ExistLastObjectSameObject(Task):
         answer False during the sample epoch.
         """
         if n_epoch < 4:
-            raise ValueError('Number of epoch {:d} is less than 4'.format(n_epoch))
+            raise ValueError(f'Number of epoch {n_epoch} is less than 4')
         objset = sg.ObjectSet(n_epoch=n_epoch)
 
         n_sample = random.choice([1, 2, 3, 4])

@@ -49,14 +49,8 @@ class COGLoss(LossNM):
     def _loss_function(
         self, prediction_answers, prediction_pointings, target_answers, target_pointings, mask_pointers
     ):
-        """
-        Calculates accuracy equal to mean number of correct predictions in a given batch.
+        """Calculates accuracy equal to mean number of correct predictions in a given batch.
         The function calculates two separate losses for answering and pointing actions and sums them up.
-
-
-        :param data_dict: DataDict({'targets_pointing', 'targets_answer', ...}).
-
-        :param logits: Predictions being output of the model, consisting of a tuple (logits_answer, logits_pointing).
         """
 
         # Get sizes.

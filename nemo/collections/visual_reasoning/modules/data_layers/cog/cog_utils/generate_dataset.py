@@ -101,7 +101,7 @@ class FileWriter(object):
         self._new_file()
 
     def _file_name(self):
-        return '%s_%d.json' % (self.base_name, self.cur_file_index)
+        return f'{self.base_name}_{self.cur_file_index}.json'
 
     def _new_file(self):
         if self.cur_file:
@@ -159,8 +159,8 @@ def generate_dataset(
     compress=True,
 ):
     print(
-        "Generating dataset into %s:\n  examples per family=%d\n  epochs=%d"
-        "\n  start_index=%d\n  per_file=%d" % (output_dir, examples_per_task, epochs, start_index, per_file)
+        f"Generating dataset into {output_dir}:\n  examples per family={examples_per_task}\n  epochs={epochs}"
+        f"\n  start_index={start_index}\n  per_file={per_file}"
     )
     if not os.path.exists(output_dir):
         mkdir(output_dir)
@@ -177,12 +177,13 @@ def generate_dataset(
         p = np.random.permutation(total_examples)
         for i, task_ind in enumerate(p):
             if i % 10000 == 0 and i > 0:
-                print("Generated ", i, " examples")
+                print(f"Generated {i} examples")
             task_family = families[task_ind % n_families]
             example, _, _ = generate_example(memory_length, max_distractors, task_family, epochs)
             # Write the example to file
             dump_str = json.dumps(example, sort_keys=True, separators=(',', ': '))
-            assert '\n' not in dump_str, 'dumps_str has new line %s' % (dump_str,)
+            if '\n' in dump_str:
+                raise AssertionError(f'dumps_str has new line {dump_str}')
             f.write(dump_str.encode())
         f.close()
         file_names = f.file_names
@@ -190,17 +191,18 @@ def generate_dataset(
         # Write tasks for each task family into a separate file.
         file_names = []
         for family in families:
-            fname = base_fname + '_' + family + '.json' + ('.gz' if compress else '')
+            fname = f"{base_fname}_{family}.json{'.gz' if compress else ''}"
             file_names.append(fname)
             open_fn = gzip.open if compress else open
             with open_fn(fname, 'wb') as f:
                 for i in range_fn(examples_per_task):
                     if i % 10000 == 0 and i > 0:
-                        print("Generated ", i, " examples")
+                        print(f"Generated {i} examples")
                     example, _, _ = generate_example(memory_length, max_distractors, family, epochs)
                     # Write the example to file
                     dump_str = json.dumps(example, sort_keys=True, separators=(',', ': '))
-                    assert '\n' not in dump_str, 'dumps_str has new line %s' % (dump_str,)
+                    if '\n' in dump_str:
+                        raise AssertionError(f'dumps_str has new line {dump_str}')
                     f.write(dump_str.encode())
                     if i != examples_per_task - 1:
                         f.write(b'\n')
@@ -237,7 +239,7 @@ def generate_val_or_test(
     path, examples_per_task, sequence_length, memory_length, max_distractors, nr_processors, data_type, cog_variant
 ):
     # 20x smaller than training.
-    output_dir = os.path.join(path, '%s_%s' % (data_type, cog_variant))
+    output_dir = os.path.join(path, f'{data_type}_{cog_variant}')
 
     generate_dataset(
         sequence_length,
@@ -251,13 +253,12 @@ def generate_val_or_test(
 
 
 def main(path, examples_per_task, sequence_length, memory_length, max_distractors, nr_processors):
-    cog_variant = '%d_%d_%d' % (sequence_length, memory_length, max_distractors)
+    cog_variant = f'{sequence_length}_{memory_length}_{max_distractors}'
 
     if nr_processors > 2:
         train_parallel = nr_processors - 2
-        assert (
-            examples_per_task % (2 * train_parallel)
-        ) == 0, "examples_per_task must be a multiple of 2*(nr_processors - 2)"
+        if (examples_per_task % (2 * train_parallel)) != 0:
+            raise ValueError("examples_per_task must be a multiple of 2*(nr_processors - 2)")
         examples_per_task_per_job = examples_per_task // train_parallel
 
         pool = multiprocessing.Pool(processes=nr_processors)

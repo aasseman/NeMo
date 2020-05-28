@@ -111,7 +111,8 @@ def set_outputs_from_targets(n_epoch, objsets, out_pnt_xy, out_word, mask_pnt, m
                 # For invalid target, no loss is used. Everything remains zero.
                 pass
             elif isinstance(target, (list, tuple)):
-                assert len(target) == 2, "Expected 2-D target. Got " + str(target)
+                if len(target) != 2:
+                    raise ValueError(f"Expected 2-D target. Got {target}")
                 # minimize point loss
                 out_pnt_xy[j, :] = target
                 mask_pnt[j] = 1.0
@@ -119,7 +120,7 @@ def set_outputs_from_targets(n_epoch, objsets, out_pnt_xy, out_word, mask_pnt, m
                 out_word[j] = const.OUTPUTVOCABULARY.index(target)
                 mask_word[j] = 1.0
             else:
-                raise TypeError('Unknown target type: %s %s' % (type(target), target))
+                raise TypeError(f'Unknown target type: {type(target)} {target}')
             j += 1
 
 
@@ -161,7 +162,8 @@ def generate_batch(tasks, n_epoch=30, img_size=224, objsets=None, n_distractor=1
             )
 
     max_objset_epoch = max([objset.n_epoch for objset in objsets])
-    assert max_objset_epoch == n_epoch, '%d != %d' % (max_objset_epoch, n_epoch)
+    if max_objset_epoch != n_epoch:
+        raise ValueError(f'{max_objset_epoch} != {n_epoch}')
 
     in_imgs = sg.render(objsets, img_size)
     # The rendered images are batch major
