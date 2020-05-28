@@ -15,7 +15,7 @@
 import torch
 from torch import nn
 
-from .cog_utils import constants
+from ..modules.data_layers.cog import constants
 
 # TODO: Test those functions
 

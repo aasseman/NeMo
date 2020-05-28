@@ -29,8 +29,8 @@ import torch.nn as nn
 import wget
 from torch.utils.data import Dataset
 
-from .cog_utils import constants, generate_dataset
-from .cog_utils import json_to_img as jti
+from . import constants, generate_dataset
+from . import json_to_img as jti
 from nemo.backends.pytorch import DataLayerNM
 from nemo.core import DeviceType, NeuralModuleFactory
 from nemo.core.neural_types import CategoricalValuesType, ChannelType, MaskType, NeuralType, VoidType
