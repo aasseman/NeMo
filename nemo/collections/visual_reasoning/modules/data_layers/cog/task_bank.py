@@ -969,7 +969,7 @@ task_family_dict = OrderedDict(
         ('SimpleExistGo', SimpleExistGo),
         ('AndSimpleExistColorGo', AndSimpleExistColorGo),
         ('AndSimpleExistShapeGo', AndSimpleExistShapeGo),
-        ('AndSimpleExistGo', SimpleExistGo),
+        ('AndSimpleExistGo', SimpleExistGo), # Typo made by the original authors. Left for consistency.
         ('ExistColorGo', ExistColorGo),
         ('ExistShapeGo', ExistShapeGo),
         ('ExistGo', ExistGo),
