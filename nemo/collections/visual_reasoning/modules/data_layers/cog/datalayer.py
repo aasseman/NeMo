@@ -36,6 +36,7 @@ from nemo.core import DeviceType, NeuralModuleFactory
 from nemo.core.neural_types import CategoricalValuesType, ChannelType, MaskType, NeuralType, VoidType
 from nemo.utils import logging
 from nemo.utils.decorators import add_port_docs
+from nemo.collections.nlp.data import WordTokenizer
 
 
 class COGDataLayer(DataLayerNM, Dataset):
@@ -201,6 +202,12 @@ class COGDataLayer(DataLayerNM, Dataset):
 
         self.length = len(self._dataset)
 
+        # Create tokenizer. We have to create a file for nemo's tokenizer
+        self._vocab_file_path = os.path.join(self.data_folder_main, "vocab.txt")
+        with open(self._vocab_file_path, mode='w') as vocab_file:
+            vocab_file.writelines('\n'.join(constants.INPUTVOCABULARY))
+        self._tokenizer = WordTokenizer(self._vocab_file_path)
+
     @add_port_docs
     @property
     def output_ports(self):
@@ -260,11 +267,10 @@ class COGDataLayer(DataLayerNM, Dataset):
         questions = [self._dataset[index]['question']]
 
         questions_string = [self._dataset[index]['question']]
-        questions = torch.LongTensor([constants.INPUTVOCABULARY.index(word) for word in questions[0].split()])
-        if questions.size(0) <= self.nwords:
-            prev_size = questions.size(0)
-            questions.resize_(self.nwords)
-            questions[prev_size:] = 0
+        
+        questions = self._tokenizer.text_to_ids(questions[0])
+        questions_lens = len(questions)
+        questions = torch.LongTensor(questions)
 
         # Set targets - depending on the answers.
         answers = self._dataset[index]['answers']
@@ -281,6 +287,7 @@ class COGDataLayer(DataLayerNM, Dataset):
             images,
             tasks,
             questions,
+            questions_lens,
             targets_pointing,
             targets_answer,
             mask_pnt,
@@ -289,8 +296,8 @@ class COGDataLayer(DataLayerNM, Dataset):
             answers_string,
         )
 
-    @staticmethod
-    def collate_fn(batch):
+
+    def collate_fn(self, batch):
         """Collate separate samples from `__getitem__` into a batch. Effectively doing a transpose of the input data.
 
         :param batch: List of samples.
@@ -305,6 +312,7 @@ class COGDataLayer(DataLayerNM, Dataset):
             images,
             tasks,
             questions,
+            questions_lens,
             targets_pointing,
             targets_answer,
             mask_pnt,
@@ -314,7 +322,13 @@ class COGDataLayer(DataLayerNM, Dataset):
         ) = map(list, zip_longest(*batch))
 
         images = torch.stack(images).type(torch.FloatTensor)
-        questions = torch.stack(questions).type(torch.LongTensor)
+
+        # Padding and stacking
+        questions = nn.utils.rnn.pad_sequence(questions, batch_first=True, padding_value=self._tokenizer.vocab['<PAD>'])
+        questions = torch.tensor(questions, dtype=torch.long)
+
+        questions_lens = torch.tensor(questions_lens, dtype=torch.long)
+
         # Targets.
         targets_pointing = torch.stack(targets_pointing).type(torch.FloatTensor)
         targets_answer = torch.stack(targets_answer).type(torch.LongTensor)
@@ -326,6 +340,7 @@ class COGDataLayer(DataLayerNM, Dataset):
             images,
             tasks,
             questions,
+            questions_lens,
             targets_pointing,
             targets_answer,
             mask_pnt,
@@ -387,6 +402,7 @@ class COGDataLayer(DataLayerNM, Dataset):
             images,
             tasks,
             questions,
+            questions_lens,
             targets_pointing,
             targets_answer,
             mask_pnt,
@@ -400,6 +416,7 @@ class COGDataLayer(DataLayerNM, Dataset):
             f"sample_number={sample_number}",
             f"tasks={tasks}",
             f"questions={questions}",
+            f"questions_lens={questions_lens}",
             f"targets_answer={targets_answer}",
             f"mask_pnt={mask_pnt}",
             f"mask_word={mask_word}",
@@ -477,7 +494,7 @@ if __name__ == "__main__":
     # -------------------------
 
     # Define useful params
-    tasks = ['ExistColorGo']
+    tasks = 'all'
 
     # Create problem - task Go
     cog_dataset = COGDataLayer(data_folder='~/data/cog', subset='val', cog_type='canonical', cog_tasks=tasks)
@@ -486,7 +503,7 @@ if __name__ == "__main__":
     from torch.utils.data import DataLoader
 
     dataloader = DataLoader(
-        dataset=cog_dataset, collate_fn=cog_dataset.collate_fn, batch_size=batch_size, shuffle=False, num_workers=8
+        dataset=cog_dataset, collate_fn=cog_dataset.collate_fn, batch_size=batch_size, shuffle=True, num_workers=8
     )
 
     # Display single sample (0) from batch.
@@ -540,6 +557,7 @@ if __name__ == "__main__":
                 images,
                 tasks,
                 questions,
+                questions_lens,
                 targets_pointing,
                 targets_answer,
                 mask_pnt,
