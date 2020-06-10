@@ -33,7 +33,7 @@ from . import constants, generate_dataset
 from . import json_to_img as jti
 from nemo.backends.pytorch import DataLayerNM
 from nemo.core import DeviceType, NeuralModuleFactory
-from nemo.core.neural_types import CategoricalValuesType, ChannelType, MaskType, NeuralType, VoidType
+from nemo.core.neural_types import LabelsType, ChannelType, MaskType, NeuralType, VoidType, LengthsType, TokenIndex
 from nemo.utils import logging
 from nemo.utils.decorators import add_port_docs
 from nemo.collections.nlp.data import WordTokenizer
@@ -54,6 +54,7 @@ class COGDataLayer(DataLayerNM, Dataset):
 
     def __init__(
         self,
+        batch_size: int,
         data_folder: str = '~/data/cog',
         subset: str = 'train',
         cog_tasks: str = 'class',
@@ -101,6 +102,8 @@ class COGDataLayer(DataLayerNM, Dataset):
 
         # Call base class constructors
         super(COGDataLayer, self).__init__()
+
+        self._batch_size = batch_size
 
         # Data folder main is /path/cog
         # Data folder parent is data_X_Y_Z
@@ -206,7 +209,7 @@ class COGDataLayer(DataLayerNM, Dataset):
         self._vocab_file_path = os.path.join(self.data_folder_main, "vocab.txt")
         with open(self._vocab_file_path, mode='w') as vocab_file:
             vocab_file.writelines('\n'.join(constants.INPUTVOCABULARY))
-        self._tokenizer = WordTokenizer(self._vocab_file_path)
+        self.tokenizer = WordTokenizer(self._vocab_file_path)
 
     @add_port_docs
     @property
@@ -215,15 +218,16 @@ class COGDataLayer(DataLayerNM, Dataset):
         Creates definitions of output ports.
         """
         return {
-            "images": NeuralType(('B', 'T', 'C', 'H', 'W'), elements_type=ChannelType),
-            "tasks": NeuralType(('B'), elements_type=VoidType),
-            "questions": NeuralType(('B', 'A'), elements_type=CategoricalValuesType),
-            "targets_pointing": NeuralType(('B', 'T', 'A'), elements_type=CategoricalValuesType),
-            "targets_answer": NeuralType(('B', 'T'), elements_type=CategoricalValuesType),
-            "mask_pointing": NeuralType(('B', 'T'), elements_type=MaskType),
-            "mask_word": NeuralType(('B', 'T'), elements_type=MaskType),
-            "questions_string": NeuralType(('B'), elements_type=VoidType),
-            "answers_string": NeuralType(('B', 'T'), elements_type=VoidType),
+            "images": NeuralType(('B', 'T', 'C', 'H', 'W'), elements_type=ChannelType()),
+            "tasks": NeuralType(('B'), elements_type=VoidType()),
+            "questions": NeuralType(('B', 'T'), elements_type=TokenIndex()),
+            "questions_lens": NeuralType(('B',), elements_type=LengthsType()),
+            "targets_pointing": NeuralType(('B', 'T', 'Any'), elements_type=LabelsType()),
+            "targets_answer": NeuralType(('B', 'T'), elements_type=LabelsType()),
+            "mask_pointing": NeuralType(('B', 'T'), elements_type=MaskType()),
+            "mask_word": NeuralType(('B', 'T'), elements_type=MaskType()),
+            "questions_string": NeuralType(('B'), elements_type=VoidType()),
+            "answers_string": NeuralType(('B', 'T'), elements_type=VoidType()),
         }
 
     def __len__(self):
@@ -268,7 +272,7 @@ class COGDataLayer(DataLayerNM, Dataset):
 
         questions_string = [self._dataset[index]['question']]
         
-        questions = self._tokenizer.text_to_ids(questions[0])
+        questions = self.tokenizer.text_to_ids(questions[0])
         questions_lens = len(questions)
         questions = torch.LongTensor(questions)
 
@@ -324,8 +328,7 @@ class COGDataLayer(DataLayerNM, Dataset):
         images = torch.stack(images).type(torch.FloatTensor)
 
         # Padding and stacking
-        questions = nn.utils.rnn.pad_sequence(questions, batch_first=True, padding_value=self._tokenizer.vocab['<PAD>'])
-        questions = torch.tensor(questions, dtype=torch.long)
+        questions = nn.utils.rnn.pad_sequence(questions, batch_first=True, padding_value=self.tokenizer.vocab['<PAD>'])
 
         questions_lens = torch.tensor(questions_lens, dtype=torch.long)
 
@@ -494,10 +497,10 @@ if __name__ == "__main__":
     # -------------------------
 
     # Define useful params
-    tasks = 'all'
+    tasks = 'class'
 
     # Create problem - task Go
-    cog_dataset = COGDataLayer(data_folder='~/data/cog', subset='val', cog_type='canonical', cog_tasks=tasks)
+    cog_dataset = COGDataLayer(data_folder='~/data/cog', subset='val', cog_type='canonical', cog_tasks=tasks, batch_size=batch_size)
 
     # Set up Dataloader iterator
     from torch.utils.data import DataLoader
@@ -522,7 +525,8 @@ if __name__ == "__main__":
         # Define params to load entire dataset - all tasks included
         preload = time.time()
         full_cog_canonical = COGDataLayer(
-            data_folder='~/data/cog/', subset='val', cog_type='canonical', cog_tasks='all'
+            data_folder='~/data/cog/', subset='val', cog_type='canonical', cog_tasks='all',
+            batch_size=batch_size
         )
         postload = time.time()
 
