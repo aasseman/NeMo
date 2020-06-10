@@ -19,9 +19,11 @@ __author__ = "Emre Sevgen, Tomasz Kornuta"
 
 import gzip
 import json
+import multiprocessing as mp
 import os
 import tarfile
-from itertools import zip_longest
+from functools import partial
+from itertools import chain, zip_longest
 
 import numpy as np
 import torch
@@ -32,11 +34,25 @@ from torch.utils.data import Dataset
 from . import constants, generate_dataset
 from . import json_to_img as jti
 from nemo.backends.pytorch import DataLayerNM
+from nemo.collections.nlp.data import WordTokenizer
 from nemo.core import DeviceType, NeuralModuleFactory
-from nemo.core.neural_types import LabelsType, ChannelType, MaskType, NeuralType, VoidType, LengthsType, TokenIndex
+from nemo.core.neural_types import ChannelType, LabelsType, LengthsType, MaskType, NeuralType, TokenIndex, VoidType
 from nemo.utils import logging
 from nemo.utils.decorators import add_port_docs
-from nemo.collections.nlp.data import WordTokenizer
+
+
+# Top level for multiprocessing to work
+def _mp_loader(filename, tasks=None):
+    r = []
+    with gzip.open(filename) as f:
+        fulltask = f.read().decode('utf-8').split('\n')
+        for datapoint in fulltask:
+            task = json.loads(datapoint)
+            if tasks is None:
+                r.append(task)
+            elif task['family'] in tasks:
+                r.append(task)
+    return r
 
 
 class COGDataLayer(DataLayerNM, Dataset):
@@ -180,28 +196,37 @@ class COGDataLayer(DataLayerNM, Dataset):
         self._dataset = []
 
         logging.info("Loading dataset as json into memory.")
+
         # Val and Test are not shuffled
         if self.set == 'val' or self.set == 'test':
+            filelist = []
             for tasklist in os.listdir(self.data_folder_child):
                 if tasklist[4:-8] in self.tasks:
-                    with gzip.open(os.path.join(self.data_folder_child, tasklist)) as f:
-                        fulltask = f.read().decode('utf-8').split('\n')
-                        for datapoint in fulltask:
-                            self._dataset.append(json.loads(datapoint))
-                    logging.info(f"{tasklist[4:-8]} task examples loaded.")
+                    filelist += [os.path.join(self.data_folder_child, tasklist)]
                 else:
                     logging.info(f"Skipped loading {tasklist[4:-8]} task.")
 
+            logging.info(f"Loading using {len(os.sched_getaffinity(0))} processes...")
+            with mp.Pool(len(os.sched_getaffinity(0))) as pool:
+                self._dataset = list(chain(*pool.map(_mp_loader, filelist)))
+
+            # If we're here, means it loaded succesffully
+            for elem in filelist:
+                logging.info(f"{elem.split('/')[-1][4:-8]} task examples loaded.")
+
         # Training set is shuffled
         elif self.set == 'train':
+            filelist = []
             for zipfile in os.listdir(self.data_folder_child):
-                with gzip.open(os.path.join(self.data_folder_child, zipfile)) as f:
-                    fullzip = f.read().decode('utf-8').split('\n')
-                    for datapoint in fullzip:
-                        task = json.loads(datapoint)
-                        if task['family'] in self.tasks:
-                            self._dataset.append(task)
-                logging.info(f"Zip file {zipfile} loaded.")
+                filelist += [os.path.join(self.data_folder_child, zipfile)]
+
+            logging.info(f"Loading using {len(os.sched_getaffinity(0))} processes...")
+            with mp.Pool(len(os.sched_getaffinity(0))) as pool:
+                self._dataset = list(chain(*pool.map(partial(_mp_loader, tasks=self.tasks), filelist)))
+
+            # If we're here, means it loaded succesffully
+            for elem in filelist:
+                logging.info(f"Zip file {elem.split('/')[-1]} loaded.")
 
         self.length = len(self._dataset)
 
@@ -271,7 +296,7 @@ class COGDataLayer(DataLayerNM, Dataset):
         questions = [self._dataset[index]['question']]
 
         questions_string = [self._dataset[index]['question']]
-        
+
         questions = self.tokenizer.text_to_ids(questions[0])
         questions_lens = len(questions)
         questions = torch.LongTensor(questions)
@@ -299,7 +324,6 @@ class COGDataLayer(DataLayerNM, Dataset):
             questions_string,
             answers_string,
         )
-
 
     def collate_fn(self, batch):
         """Collate separate samples from `__getitem__` into a batch. Effectively doing a transpose of the input data.
@@ -500,7 +524,9 @@ if __name__ == "__main__":
     tasks = 'class'
 
     # Create problem - task Go
-    cog_dataset = COGDataLayer(data_folder='~/data/cog', subset='val', cog_type='canonical', cog_tasks=tasks, batch_size=batch_size)
+    cog_dataset = COGDataLayer(
+        data_folder='~/data/cog', subset='val', cog_type='canonical', cog_tasks=tasks, batch_size=batch_size
+    )
 
     # Set up Dataloader iterator
     from torch.utils.data import DataLoader
@@ -525,8 +551,7 @@ if __name__ == "__main__":
         # Define params to load entire dataset - all tasks included
         preload = time.time()
         full_cog_canonical = COGDataLayer(
-            data_folder='~/data/cog/', subset='val', cog_type='canonical', cog_tasks='all',
-            batch_size=batch_size
+            data_folder='~/data/cog/', subset='val', cog_type='canonical', cog_tasks='all', batch_size=batch_size
         )
         postload = time.time()
 
