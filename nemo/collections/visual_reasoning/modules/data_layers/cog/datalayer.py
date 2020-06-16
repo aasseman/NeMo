@@ -71,6 +71,8 @@ class COGDataLayer(DataLayerNM, Dataset):
     def __init__(
         self,
         batch_size: int,
+        shuffle: bool = False,
+        pin_memory: bool = False,
         data_folder: str = '~/data/cog',
         subset: str = 'train',
         cog_tasks: str = 'class',
@@ -120,6 +122,8 @@ class COGDataLayer(DataLayerNM, Dataset):
         super(COGDataLayer, self).__init__()
 
         self._batch_size = batch_size
+        self._shuffle = shuffle
+        self._pin_memory = pin_memory
 
         # Data folder main is /path/cog
         # Data folder parent is data_X_Y_Z
@@ -352,7 +356,7 @@ class COGDataLayer(DataLayerNM, Dataset):
         images = torch.stack(images).type(torch.FloatTensor)
 
         # Padding and stacking
-        questions = nn.utils.rnn.pad_sequence(questions, batch_first=True, padding_value=self.tokenizer.vocab['<PAD>'])
+        questions = nn.utils.rnn.pad_sequence(questions, batch_first=True, padding_value=self.tokenizer.pad_id)
 
         questions_lens = torch.tensor(questions_lens, dtype=torch.long)
 
