@@ -24,17 +24,13 @@ from ..modules.data_layers.cog import constants
 
 @dataclass
 class TaskStats:
-    n_correct_class: int = 0
-    n_total_class: int = 0
-    n_correct_reg: float = 0
-    n_total_reg: float = 0
+    n_correct: int = 0
+    n_total: int = 0
 
     def __add__(self, other):
         return TaskStats(
-            n_correct_class=self.n_correct_class + other.n_correct_class,
-            n_total_class=self.n_total_class + other.n_total_class,
-            n_correct_reg=self.n_correct_reg + other.n_correct_reg,
-            n_total_reg=self.n_total_reg + other.n_total_reg
+            n_correct=self.n_correct + other.n_correct,
+            n_total=self.n_total + other.n_total,
         )
 
 
@@ -72,13 +68,14 @@ def calculate_stats(
 
         # Iterate over each element in batch
         for (task_, correct_answers_, mask_words_) in zip(tasks, correct_answers, mask_words):
-            if task_ in d.keys():
-                d[task_].n_total_class += mask_words_.sum().cpu().item()
-                d[task_].n_correct_class += correct_answers_.sum().cpu().item()
-            else:
-                d[task_] = TaskStats(
-                    n_total_class=mask_words_.sum().cpu().item(), n_correct_class=correct_answers_.sum().cpu().item()
-                )
+            if task_ in constants.CLASSIFICATION_TASKS:
+                if task_ in d.keys():
+                    d[task_].n_total += mask_words_.sum().cpu().item()
+                    d[task_].n_correct += correct_answers_.sum().cpu().item()
+                else:
+                    d[task_] = TaskStats(
+                        n_total=mask_words_.sum().cpu().item(), n_correct=correct_answers_.sum().cpu().item()
+                    )
 
     # Regression stats (pointing)
     # If none of these are `None`
@@ -113,13 +110,14 @@ def calculate_stats(
 
         # Iterate over each element in batch
         for (task_, correct_pointing_, mask_pointings_) in zip(tasks, correct_pointing, mask_pointings):
-            if task_ in d.keys():
-                d[task_].n_total_reg += mask_pointings_.sum().cpu().item()
-                d[task_].n_correct_reg += correct_pointing_.sum().cpu().item()
-            else:
-                d[task_] = TaskStats(
-                    n_total_reg=mask_pointings_.sum().cpu().item(), n_correct_reg=correct_pointing_.sum().cpu().item()
-                )
+            if task_ in constants.REGRESSION_TASKS:
+                if task_ in d.keys():
+                    d[task_].n_total += mask_pointings_.sum().cpu().item()
+                    d[task_].n_correct += correct_pointing_.sum().cpu().item()
+                else:
+                    d[task_] = TaskStats(
+                        n_total=mask_pointings_.sum().cpu().item(), n_correct=correct_pointing_.sum().cpu().item()
+                    )
 
     return d
 
@@ -141,35 +139,26 @@ def calculate_accuracies(d: dict) -> dict:
     accuracies = dict()
     # Compute mean for each of those lists
 
-    n_total_class_alltasks = 0
-    n_correct_class_alltasks = 0
-    n_total_reg_alltasks = 0
-    n_correct_reg_alltasks = 0
+    n_total_alltasks = 0
+    n_correct_alltasks = 0
 
-    s_alltasks = TaskStats()
+    s_class = TaskStats()
+    s_reg = TaskStats()
 
     for k, l in d.items():
         s = reduce(lambda a, b: a + b, l)
-        s_alltasks += s
+        if k in constants.CLASSIFICATION_TASKS:
+            s_class += s
+        elif k in constants.REGRESSION_TASKS:
+            s_reg += s
 
         accuracies[k] = dict()
-        accuracies[k]["class"] = s.n_correct_class / s.n_total_class if s.n_total_class != 0 else nan
-        accuracies[k]["reg"] = s.n_correct_reg / s.n_total_reg if s.n_total_reg != 0 else nan
-        accuracies[k]["all"] = (
-            (s.n_correct_class + s.n_correct_reg) / (s.n_total_class + s.n_total_reg)
-            if (s.n_total_class + s.n_total_reg) != 0
-            else nan
-        )
+        accuracies[k] = s.n_correct / s.n_total if s.n_total != 0 else nan
 
-    accuracies["AllTasks"] = dict()
-    accuracies["AllTasks"]["class"] = (
-        s_alltasks.n_correct_class / s_alltasks.n_total_class if s_alltasks.n_total_class != 0 else nan
-    )
-    accuracies["AllTasks"]["reg"] = s_alltasks.n_correct_reg / s_alltasks.n_total_reg if s_alltasks.n_total_reg != 0 else nan
-    accuracies["AllTasks"]["all"] = (
-        (s_alltasks.n_correct_class + s_alltasks.n_correct_reg) / (s_alltasks.n_total_class + s_alltasks.n_total_reg)
-        if (s_alltasks.n_total_class + s_alltasks.n_total_reg) != 0
-        else nan
-    )
+    accuracies["AllClass"] = s_class.n_correct / s_class.n_total if s_class.n_total != 0 else nan
+    accuracies["AllReg"] = s_reg.n_correct / s_reg.n_total if s_reg.n_total != 0 else nan
+
+    s = s_class + s_reg
+    accuracies["All"] = s.n_correct / s.n_total if s.n_total != 0 else nan
 
     return accuracies
